@@ -1,0 +1,60 @@
+import { QSR_ZTS } from 'znn-typescript-sdk';
+import { getZenon } from './zenon.js';
+import { getWalletAddress } from './wallet.js';
+import { CONFIG } from '../config/index.js';
+import { logger } from '../utils/logger.js';
+
+/**
+ * Get the current QSR balance of the bot's wallet in human-readable units.
+ * Always queried live from the Zenon node — never stored in the DB.
+ */
+export async function getQsrBalance(): Promise<number> {
+  const zenon = getZenon();
+  const address = getWalletAddress();
+
+  const accountInfo = await zenon.ledger.getAccountInfoByAddress(address);
+
+  if (!accountInfo || !accountInfo.balanceInfoMap) {
+    return 0;
+  }
+
+  const qsrZtsStr = QSR_ZTS.toString();
+  for (const [token, balanceInfo] of Object.entries(accountInfo.balanceInfoMap)) {
+    if (token === qsrZtsStr || balanceInfo?.token?.tokenStandard?.toString() === qsrZtsStr) {
+      const balance = balanceInfo.balance;
+      if (balance) {
+        // Convert from base units (8 decimals) to human-readable
+        return Number(balance.toString()) / Math.pow(10, CONFIG.QSR_DECIMALS);
+      }
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Check if the wallet balance is above the unfuse threshold.
+ */
+export async function isAboveThreshold(): Promise<boolean> {
+  const balance = await getQsrBalance();
+  return balance >= CONFIG.BALANCE_THRESHOLD_QSR;
+}
+
+/**
+ * Check if the wallet can afford a fusion of the given QSR amount.
+ * Users can fuse down to 0 — the threshold only triggers unfusing.
+ */
+export async function canAffordFusion(tierQsr: number): Promise<boolean> {
+  const balance = await getQsrBalance();
+  return balance >= tierQsr;
+}
+
+/**
+ * Get the QSR available for fusing (full wallet balance).
+ * Users can fuse until the wallet is empty. The BALANCE_THRESHOLD_QSR
+ * only controls when the bot starts unfusing old fusions to reclaim QSR.
+ */
+export async function getAvailableQsr(): Promise<number> {
+  const balance = await getQsrBalance();
+  return Math.max(0, balance);
+}

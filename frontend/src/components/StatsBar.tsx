@@ -1,0 +1,51 @@
+import { useState } from 'react';
+import { useStats } from '../hooks/useFusions';
+
+export function StatsBar() {
+  const { data, isLoading } = useStats();
+  const [copied, setCopied] = useState(false);
+
+  const copyAddress = async () => {
+    if (!data?.walletAddress) return;
+    await navigator.clipboard.writeText(data.walletAddress);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="mb-8 space-y-4">
+      {/* Wallet Address */}
+      <div className="bg-bg-card border border-border rounded-xl p-4">
+        <p className="text-text-secondary text-xs uppercase tracking-wider mb-2">Bot Wallet Address</p>
+        <div className="flex items-center gap-2">
+          <p className="font-mono text-sm text-green-primary truncate flex-1">
+            {isLoading ? '...' : data?.walletAddress}
+          </p>
+          <button
+            onClick={copyAddress}
+            className="text-text-muted hover:text-green-primary transition-colors text-xs shrink-0 cursor-pointer"
+            title="Copy address"
+          >
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      </div>
+
+      {/* QSR Stats */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-bg-card border border-border rounded-xl p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
+          <p className="text-text-secondary text-sm mb-1 uppercase tracking-wider">QSR Available</p>
+          <p className="font-mono text-3xl font-bold text-green-primary">
+            {isLoading ? '...' : data?.qsrAvailable.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="bg-bg-card border border-border rounded-xl p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
+          <p className="text-text-secondary text-sm mb-1 uppercase tracking-wider">QSR Fused</p>
+          <p className="font-mono text-3xl font-bold text-green-primary">
+            {isLoading ? '...' : data?.qsrFused.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

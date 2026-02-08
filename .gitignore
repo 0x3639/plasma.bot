@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Reference SDK (local copy for development reference only)
+znn-typescript-sdk/
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Wallet files — NEVER commit
+*.keyfile
+wallet.json
+dev-wallet.json
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Design reference
+image.png
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Temp
+tmp/

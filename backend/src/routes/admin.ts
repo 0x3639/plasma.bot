@@ -1,0 +1,38 @@
+import { Router } from 'express';
+import { receiveAllPending } from '../services/receiveTx.js';
+import { reconcileFusionIds } from '../cron/reconcile.js';
+import { runUnfuseCycle } from '../services/unfuse.js';
+import { getQsrBalance } from '../services/balance.js';
+import { logger } from '../utils/logger.js';
+
+const router = Router();
+
+// POST /api/admin/receive — force receive all pending transactions
+router.post('/receive', async (_req, res) => {
+  try {
+    const received = await receiveAllPending();
+    const balance = await getQsrBalance();
+    logger.info(`Manual receive triggered: ${received} transactions received`);
+    res.json({ received, qsrBalance: balance });
+  } catch (error) {
+    logger.error('Manual receive failed', { error });
+    res.status(500).json({ error: 'Receive failed' });
+  }
+});
+
+// POST /api/admin/cycle — force full balance monitor cycle (receive + reconcile + unfuse)
+router.post('/cycle', async (_req, res) => {
+  try {
+    const received = await receiveAllPending();
+    await reconcileFusionIds();
+    await runUnfuseCycle();
+    const balance = await getQsrBalance();
+    logger.info(`Manual cycle triggered: ${received} received, balance: ${balance} QSR`);
+    res.json({ received, qsrBalance: balance });
+  } catch (error) {
+    logger.error('Manual cycle failed', { error });
+    res.status(500).json({ error: 'Cycle failed' });
+  }
+});
+
+export default router;

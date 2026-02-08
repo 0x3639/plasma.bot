@@ -1,0 +1,10 @@
+{
+  "name": "plasma-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zenon Network Plasma Bot — fuse QSR to provide plasma for users",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
+}
