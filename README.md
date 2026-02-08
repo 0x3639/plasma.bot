@@ -13,7 +13,7 @@ A self-hosted bot for the [Zenon Network](https://zenon.network) that fuses QSR 
 
 ```
 ┌─────────────────────────────────────┐
-│         DigitalOcean VPS            │
+│                VPS                  │
 │                                     │
 │  Caddy (reverse proxy + auto SSL)   │
 │    ├─ /        → frontend (static)  │
