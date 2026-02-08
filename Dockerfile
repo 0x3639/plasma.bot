@@ -60,10 +60,9 @@ COPY --from=build-backend /app/backend/dist/ backend/dist/
 # Copy frontend build (extracted by deploy script into host volume for Caddy)
 COPY --from=build-frontend /app/frontend/dist/ frontend/dist/
 
-# Non-root user for security (UID 1000 matches 'deploy' on host so bind-mounted
-# wallet keyfile with chmod 600 is readable inside the container)
-RUN groupadd -r -g 1000 plasmabot && useradd -r -u 1000 -g plasmabot plasmabot
-USER plasmabot
+# Non-root user for security — use the built-in 'node' user (UID 1000) which
+# matches the 'deploy' user on the host, so bind-mounted wallet (chmod 600) is readable
+USER node
 
 EXPOSE 3001
 
