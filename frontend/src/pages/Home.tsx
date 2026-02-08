@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { StatsBar } from '../components/StatsBar';
 import { AddressInput } from '../components/AddressInput';
 import { TierSelector } from '../components/TierSelector';
@@ -29,26 +29,22 @@ export function Home() {
   const availableTiers = stats?.availableTiers;
   const noTiersAvailable = availableTiers && availableTiers.length === 0;
 
-  // Clear selected tier if it becomes unavailable
-  useEffect(() => {
-    if (tier && availableTiers && !availableTiers.includes(tier)) {
-      setTier(null);
-    }
-  }, [tier, availableTiers]);
+  // Derive effective tier: clear selection if it became unavailable
+  const effectiveTier = tier && availableTiers && !availableTiers.includes(tier) ? null : tier;
 
   const isValidAddress = /^z1[a-z0-9]{38}$/.test(address);
-  const canSubmit = isValidAddress && tier !== null && !fuseMutation.isPending && !noTiersAvailable;
+  const canSubmit = isValidAddress && effectiveTier !== null && !fuseMutation.isPending && !noTiersAvailable;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !tier) return;
+    if (!canSubmit || !effectiveTier) return;
 
     setAlert(null);
 
     try {
       const result = await fuseMutation.mutateAsync({
         address,
-        tier,
+        tier: effectiveTier,
       });
 
       if (result.success) {
@@ -117,7 +113,7 @@ export function Home() {
           ) : (
             <form onSubmit={handleSubmit}>
               <AddressInput value={address} onChange={setAddress} />
-              <TierSelector selected={tier} onSelect={setTier} availableTiers={availableTiers} />
+              <TierSelector selected={effectiveTier} onSelect={setTier} availableTiers={availableTiers} />
               <button
                 type="submit"
                 disabled={!canSubmit}
