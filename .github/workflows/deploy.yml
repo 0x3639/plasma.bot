@@ -1,0 +1,91 @@
+name: Test & Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run backend tests
+        run: npm test --workspace=backend
+
+      - name: Lint frontend
+        run: npm run lint --workspace=frontend
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: deploy
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/plasma-bot
+
+            echo "==> Pulling latest code..."
+            git pull origin main
+
+            echo "==> Writing .env.production from secrets..."
+            cat > .env.production << 'ENVEOF'
+            PORT=3001
+            NODE_ENV=production
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            ZNN_NODE_URL=${{ secrets.ZNN_NODE_URL }}
+            KEYFILE_PATH=/etc/plasma-bot/wallet.json
+            KEYFILE_PASSWORD=${{ secrets.KEYFILE_PASSWORD }}
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}
+            RATE_LIMIT_PER_IP_MAX=4
+            BALANCE_THRESHOLD_QSR=500
+            ENVEOF
+            chmod 600 .env.production
+
+            echo "==> Building Docker images..."
+            docker compose build
+
+            echo "==> Extracting frontend assets..."
+            CONTAINER_ID=$(docker create plasma-bot-backend)
+            mkdir -p ./frontend-dist
+            rm -rf ./frontend-dist/*
+            docker cp "$CONTAINER_ID:/app/frontend/dist/." ./frontend-dist/
+            docker rm "$CONTAINER_ID"
+
+            echo "==> Restarting services..."
+            docker compose up -d
+
+            echo "==> Waiting for backend to start..."
+            sleep 10
+
+            echo "==> Health check..."
+            HEALTH=$(curl -sf http://backend:3001/api/health 2>/dev/null || curl -sf http://localhost:3001/api/health 2>/dev/null || echo '{"status":"error"}')
+            echo "$HEALTH"
+
+            if echo "$HEALTH" | grep -q '"status":"ok"'; then
+              echo "==> Deployment successful!"
+            else
+              echo "==> WARNING: Health check failed. Check logs:"
+              docker compose logs --tail=50 backend
+              exit 1
+            fi
+
+            echo "==> Cleaning up old images..."
+            docker image prune -f

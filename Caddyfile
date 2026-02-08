@@ -1,0 +1,31 @@
+# Replace yourdomain.com with your actual domain
+yourdomain.com {
+	# API reverse proxy
+	handle /api/* {
+		reverse_proxy backend:3001 {
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# Frontend static files (SPA)
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Security headers
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Request size limit (matches Express 1kb limit)
+	request_body {
+		max_size 1KB
+	}
+}

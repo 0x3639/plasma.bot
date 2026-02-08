@@ -1,0 +1,54 @@
+# Dependencies (Docker installs its own Linux-native deps)
+node_modules
+
+# Git history
+.git
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.production
+
+# Local SDK reference copy (dependency installed via npm from GitHub)
+znn-typescript-sdk
+
+# Build output (rebuilt in Docker)
+dist
+backend/dist
+frontend/dist
+
+# Wallet files — NEVER include in Docker image
+*.keyfile
+wallet.json
+dev-wallet.json
+
+# Tests and coverage
+coverage
+backend/src/__tests__
+backend/vitest.config.ts
+
+# Documentation and misc
+*.md
+image.png
+todo.md
+phase4.md
+roadmap.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# CI/CD
+.github

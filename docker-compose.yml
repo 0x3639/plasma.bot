@@ -1,0 +1,50 @@
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - internal
+    # NOT exposed to host — only accessible from Docker network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: plasma-bot-backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - /etc/plasma-bot/wallet.json:/etc/plasma-bot/wallet.json:ro
+    depends_on:
+      - mongodb
+    networks:
+      - internal
+    # NOT exposed to host — Caddy proxies to it
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend-dist:/srv/frontend:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  internal:
+    driver: bridge
