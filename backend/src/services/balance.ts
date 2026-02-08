@@ -23,6 +23,21 @@ export function getReservedQsr(): number {
 }
 
 /**
+ * Atomically check balance and reserve QSR in a single synchronous step.
+ * Because Node.js is single-threaded, no `await` between check and reserve
+ * means no concurrent request can sneak in between.
+ *
+ * @param amount QSR to reserve (human-readable units)
+ * @param currentBalance Live balance from chain (already fetched via async call)
+ * @returns true if reserved successfully, false if insufficient balance
+ */
+export function tryReserveQsr(amount: number, currentBalance: number): boolean {
+  if ((currentBalance - reservedQsr) < amount) return false;
+  reservedQsr += amount;
+  return true;
+}
+
+/**
  * Get the current QSR balance of the bot's wallet in human-readable units.
  * Always queried live from the Zenon node — never stored in the DB.
  */

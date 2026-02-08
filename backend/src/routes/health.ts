@@ -1,10 +1,20 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { getQsrBalance } from '../services/balance.js';
 import { Fusion } from '../models/Fusion.js';
 import { getWalletAddress } from '../services/wallet.js';
 
 const router = Router();
 const startTime = Date.now();
+
+// Rate limit health endpoint: 100 requests per minute per IP
+router.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 // GET /api/health — bot status
 router.get('/', async (_req, res) => {

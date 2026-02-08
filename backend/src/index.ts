@@ -1,4 +1,5 @@
 import express from 'express';
+import morgan from 'morgan';
 import { CONFIG } from './config/index.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { setupSecurity } from './middleware/security.js';
@@ -19,6 +20,11 @@ const app = express();
 
 // Security middleware
 setupSecurity(app);
+
+// Request logging
+app.use(morgan('short', {
+  stream: { write: (msg: string) => logger.info(msg.trim()) },
+}));
 
 // API routes
 app.use('/api/fuse', fuseRoutes);

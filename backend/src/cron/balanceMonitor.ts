@@ -5,8 +5,11 @@ import { CONFIG } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
+let isRunning = false;
 
 async function runCycle(): Promise<void> {
+  if (isRunning) return;
+  isRunning = true;
   try {
     // Step 1: Receive any pending transactions
     await receiveAllPending();
@@ -18,6 +21,8 @@ async function runCycle(): Promise<void> {
     await runUnfuseCycle();
   } catch (error) {
     logger.error('Balance monitor cycle failed', { error });
+  } finally {
+    isRunning = false;
   }
 }
 

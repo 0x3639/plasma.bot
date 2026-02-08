@@ -10,9 +10,19 @@ import { getZenon } from './zenon.js';
 let lock = Promise.resolve<unknown>(undefined);
 
 const INTER_TX_DELAY_MS = 2000;
+const SEND_TIMEOUT_MS = 30_000;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Send timeout after ${ms}ms`)), ms),
+    ),
+  ]);
 }
 
 export function serializedSend(
@@ -22,7 +32,7 @@ export function serializedSend(
   const zenon = getZenon();
 
   const next = lock.then(async () => {
-    const result = await zenon.send(block, keyPair);
+    const result = await withTimeout(zenon.send(block, keyPair), SEND_TIMEOUT_MS);
     await delay(INTER_TX_DELAY_MS);
     return result;
   });

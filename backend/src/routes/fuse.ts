@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { validateBody, fuseRequestSchema, type FuseRequestBody } from '../middleware/validate.js';
 import { ipRateLimiter, addressRateLimiter } from '../middleware/rateLimiter.js';
 import { fuseToAddress } from '../services/plasma.js';
-import { getAvailableQsr, reserveQsr, releaseQsr } from '../services/balance.js';
+import { getQsrBalance, tryReserveQsr, releaseQsr } from '../services/balance.js';
 import { getNextUnfuseTime } from '../services/unfuse.js';
 import { CONFIG, type FuseTier } from '../config/index.js';
 import { FuseRequest } from '../models/FuseRequest.js';
@@ -28,14 +28,17 @@ router.post(
     });
 
     const tierQsr = CONFIG.FUSE_TIERS[tier as FuseTier].qsr;
-    const available = await getAvailableQsr();
+    const balance = await getQsrBalance();
 
-    if (available < tierQsr) {
+    // Atomic check + reserve: no await between check and reserve,
+    // so no concurrent request can sneak in between on the event loop.
+    if (!tryReserveQsr(tierQsr, balance)) {
       fuseRequest.status = 'failed';
       fuseRequest.errorMessage = 'Insufficient QSR balance for this tier';
       await fuseRequest.save();
 
       // Build a helpful error message
+      const available = Math.max(0, balance);
       const nextUnfuse = await getNextUnfuseTime();
       let error = `Not enough QSR available for the ${tier} tier (${tierQsr} QSR needed, ${available} available).`;
 
@@ -51,9 +54,6 @@ router.post(
       res.status(503).json({ error });
       return;
     }
-
-    // Reserve QSR so concurrent requests see reduced availability
-    reserveQsr(tierQsr);
 
     try {
       // Execute the fusion

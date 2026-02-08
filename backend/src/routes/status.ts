@@ -1,17 +1,34 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { Fusion } from '../models/Fusion.js';
 import { CONFIG } from '../config/index.js';
 import { isValidAddressFormat } from '../utils/address.js';
 
 const router = Router();
 
+// Rate limit public read endpoints: 100 requests per minute per IP
+router.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
+
+const paginationSchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(CONFIG.MAX_PAGE_SIZE).default(CONFIG.DEFAULT_PAGE_SIZE),
+});
+
 // GET /api/fusions — all active fusions (paginated, newest first)
 router.get('/', async (req, res) => {
-  const page = Math.max(1, parseInt(req.query.page as string) || 1);
-  const limit = Math.min(
-    CONFIG.MAX_PAGE_SIZE,
-    Math.max(1, parseInt(req.query.limit as string) || CONFIG.DEFAULT_PAGE_SIZE),
-  );
+  const parsed = paginationSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid pagination parameters' });
+    return;
+  }
+  const { page, limit } = parsed.data;
   const skip = (page - 1) * limit;
 
   const [fusions, total] = await Promise.all([
@@ -51,11 +68,12 @@ router.get('/:address', async (req, res) => {
     return;
   }
 
-  const page = Math.max(1, parseInt(req.query.page as string) || 1);
-  const limit = Math.min(
-    CONFIG.MAX_PAGE_SIZE,
-    Math.max(1, parseInt(req.query.limit as string) || CONFIG.DEFAULT_PAGE_SIZE),
-  );
+  const parsed = paginationSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid pagination parameters' });
+    return;
+  }
+  const { page, limit } = parsed.data;
   const skip = (page - 1) * limit;
 
   const [fusions, total] = await Promise.all([

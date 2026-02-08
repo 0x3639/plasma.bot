@@ -2,8 +2,9 @@ import winston from 'winston';
 
 const SENSITIVE_PATTERNS = [
   { regex: /\b[a-z]+(?:\s+[a-z]+){11,23}\b/gi, replacement: '[MNEMONIC_REDACTED]' },
-  { regex: /(?:private[_-]?key|privateKey|secret|mnemonic|entropy|password|passphrase)\s*[:=]\s*["']?[^\s"',}{]+/gi, replacement: '[SENSITIVE_REDACTED]' },
+  { regex: /(?:private[_-]?key|privateKey|secret|mnemonic|entropy|password|passphrase|admin[_-]?(?:api[_-]?)?key)\s*[:=]\s*["']?[^\s"',}{]+/gi, replacement: '[SENSITIVE_REDACTED]' },
   { regex: /KEYFILE_PASSWORD\s*[:=]\s*\S+/gi, replacement: 'KEYFILE_PASSWORD=[REDACTED]' },
+  { regex: /ADMIN_API_KEY\s*[:=]\s*\S+/gi, replacement: 'ADMIN_API_KEY=[REDACTED]' },
 ];
 
 function sanitize(value: unknown): unknown {
@@ -26,7 +27,8 @@ function sanitize(value: unknown): unknown {
       const lowerKey = key.toLowerCase();
       if (lowerKey.includes('password') || lowerKey.includes('mnemonic') ||
           lowerKey.includes('privatekey') || lowerKey.includes('secret') ||
-          lowerKey.includes('entropy') || lowerKey.includes('captchatoken')) {
+          lowerKey.includes('entropy') || lowerKey.includes('captchatoken') ||
+          lowerKey.includes('apikey') || lowerKey.includes('api_key')) {
         sanitized[key] = '[REDACTED]';
       } else {
         sanitized[key] = sanitize(val);

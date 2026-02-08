@@ -61,4 +61,8 @@ const fusionSchema = new Schema<IFusion>({
   },
 }, { timestamps: true });
 
+// Compound indexes for hot queries
+fusionSchema.index({ status: 1, expirationHeight: 1 }); // unfuse cycle: revocable fusions
+fusionSchema.index({ beneficiary: 1, status: 1 });       // rate limiter: active fusion per address
+
 export const Fusion = mongoose.model<IFusion>('Fusion', fusionSchema);

@@ -101,23 +101,34 @@ export async function runUnfuseCycle(): Promise<void> {
       continue;
     }
 
+    // Atomically claim this fusion to prevent concurrent cycles from cancelling the same one
+    const claimed = await Fusion.findOneAndUpdate(
+      { _id: fusion._id, status: 'active' },
+      { status: 'unfusing' },
+      { new: true },
+    );
+    if (!claimed) continue; // Already being unfused by another cycle
+
     try {
       const cancelBlock = zenon.embedded.plasma.cancel(Hash.parse(fusion.fusionId!));
       await serializedSend(cancelBlock, keyPair);
 
-      fusion.status = 'unfused';
-      fusion.unfusedAt = new Date();
-      await fusion.save();
+      claimed.status = 'unfused';
+      claimed.unfusedAt = new Date();
+      await claimed.save();
 
-      const fusionQsr = fusion.qsrAmount / Math.pow(10, CONFIG.QSR_DECIMALS);
+      const fusionQsr = claimed.qsrAmount / Math.pow(10, CONFIG.QSR_DECIMALS);
       expectedBalance += fusionQsr;
       unfusedCount++;
 
-      logger.info(`Unfused ${fusionQsr} QSR from ${fusion.beneficiary}. Expected balance: ${expectedBalance}`);
+      logger.info(`Unfused ${fusionQsr} QSR from ${claimed.beneficiary}. Expected balance: ${expectedBalance}`);
 
       // Brief delay between transactions
       await sleep(2000);
     } catch (error) {
+      // Revert to active so it can be retried next cycle
+      claimed.status = 'active';
+      await claimed.save();
       logger.error(`Failed to unfuse ${fusion.fusionId}`, { error });
     }
   }

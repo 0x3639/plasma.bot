@@ -3,15 +3,20 @@ import { CONFIG } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
+let isRunning = false;
 
 export function startReceiveMonitor(): void {
   logger.info(`Starting receive monitor (interval: ${CONFIG.RECEIVE_CHECK_INTERVAL_MS / 1000}s)`);
 
   intervalId = setInterval(async () => {
+    if (isRunning) return;
+    isRunning = true;
     try {
       await receiveAllPending();
     } catch (error) {
       logger.error('Receive monitor cycle failed', { error });
+    } finally {
+      isRunning = false;
     }
   }, CONFIG.RECEIVE_CHECK_INTERVAL_MS);
 }

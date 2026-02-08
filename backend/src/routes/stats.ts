@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getAvailableQsr, getQsrBalance } from '../services/balance.js';
+import rateLimit from 'express-rate-limit';
+import { getQsrBalance } from '../services/balance.js';
 import { getNextUnfuseTime } from '../services/unfuse.js';
 import { Fusion } from '../models/Fusion.js';
 import { CONFIG } from '../config/index.js';
@@ -7,6 +8,15 @@ import { getWalletAddress } from '../services/wallet.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
+
+// Rate limit public read endpoints: 100 requests per minute per IP
+router.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 // GET /api/stats — public stats for the landing page QSR banner
 router.get('/', async (_req, res) => {

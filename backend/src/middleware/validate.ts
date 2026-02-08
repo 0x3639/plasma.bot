@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
-import { isValidAddressFormat } from '../utils/address.js';
+import { isValidAddressFormat, parseZenonAddress } from '../utils/address.js';
 
 export const fuseRequestSchema = z.object({
   address: z.string()
     .min(1, 'Address is required')
     .refine(isValidAddressFormat, {
       message: 'Invalid Zenon address. Must start with z1 and be 40 characters.',
+    })
+    .refine((addr) => parseZenonAddress(addr) !== null, {
+      message: 'Invalid Zenon address checksum.',
     }),
   tier: z.enum(['low', 'medium', 'high'], {
     errorMap: () => ({ message: 'Tier must be low, medium, or high' }),

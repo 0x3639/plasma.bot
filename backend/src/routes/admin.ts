@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { receiveAllPending } from '../services/receiveTx.js';
 import { reconcileFusionIds } from '../cron/reconcile.js';
 import { runUnfuseCycle } from '../services/unfuse.js';
@@ -10,6 +11,15 @@ const router = Router();
 
 // All admin routes require API key authentication
 router.use(adminAuth);
+
+// Rate limit admin endpoints: 10 requests per minute
+router.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: 'Too many admin requests. Slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 // POST /api/admin/receive — force receive all pending transactions
 router.post('/receive', async (_req, res) => {
