@@ -75,7 +75,7 @@ jobs:
             sleep 10
 
             echo "==> Health check..."
-            HEALTH=$(curl -sf http://localhost/api/health 2>/dev/null || docker compose exec -T backend curl -sf http://localhost:3001/api/health 2>/dev/null || echo '{"status":"error"}')
+            HEALTH=$(docker compose exec -T backend node -e "fetch('http://localhost:3001/api/health').then(r=>r.text()).then(console.log)" 2>/dev/null || echo '{"status":"error"}')
             echo "$HEALTH"
 
             if echo "$HEALTH" | grep -q '"status":"ok"'; then
