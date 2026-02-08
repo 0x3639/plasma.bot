@@ -72,6 +72,8 @@ npm run test:coverage --workspace=backend # With coverage
 
 ## Environment Variables
 
+For **local development**, copy `.env.example` to `backend/.env` and fill in the values. For **production**, these are set automatically by the CI/CD pipeline from GitHub Secrets (see [GitHub Secrets](#github-secrets) below) — you never create an env file on the server manually.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Backend server port | `3001` |
@@ -113,7 +115,7 @@ The project deploys automatically via GitHub Actions when you push to `main`.
 
 ### GitHub Secrets
 
-Configure these in your repo under Settings > Secrets > Actions:
+Configure these in your repo under Settings > Secrets > Actions. The deploy workflow uses these to generate `.env.production` on the VPS at deploy time — no secrets are stored permanently on the server.
 
 | Secret | Value |
 |--------|-------|
