@@ -72,9 +72,50 @@ async function main() {
     console.log('');
   }
 
+  // Check for stale DB records (active in DB but not on chain)
+  const chainFusionIds = new Set(
+    chainEntries.list.map((e: { id: { toString(): string } }) => e.id.toString()),
+  );
+  const chainBeneficiaries = new Map<string, number>();
+  for (const entry of chainEntries.list) {
+    const ben = entry.beneficiary?.toString() || '';
+    const amt = Number(entry.qsrAmount?.toString() || '0');
+    const key = `${ben}:${amt}`;
+    chainBeneficiaries.set(key, (chainBeneficiaries.get(key) || 0) + 1);
+  }
+
+  const dbActive = await Fusion.find({ status: 'active' });
+  const dbBeneficiaries = new Map<string, typeof dbActive>();
+  for (const doc of dbActive) {
+    const key = `${doc.beneficiary}:${doc.qsrAmount}`;
+    if (!dbBeneficiaries.has(key)) dbBeneficiaries.set(key, []);
+    dbBeneficiaries.get(key)!.push(doc);
+  }
+
+  let staleCount = 0;
+  for (const [key, docs] of dbBeneficiaries) {
+    const chainCount = chainBeneficiaries.get(key) || 0;
+    const excess = docs.length - chainCount;
+    if (excess > 0) {
+      // Mark the excess DB records (oldest first) as failed
+      const sorted = docs.sort((a, b) => a.fusedAt.getTime() - b.fusedAt.getTime());
+      for (let i = 0; i < excess; i++) {
+        const doc = sorted[i];
+        console.log(`  STALE: Marking fusion ${doc._id} as failed (${doc.beneficiary}, ${doc.qsrAmount / 1e8} QSR) — not found on chain`);
+        doc.status = 'failed';
+        await doc.save();
+        staleCount++;
+      }
+    }
+  }
+
+  if (staleCount > 0) {
+    console.log(`\nMarked ${staleCount} stale DB record(s) as failed.`);
+  }
+
   // Summary
   const dbCount = await Fusion.countDocuments({ status: 'active' });
-  console.log(`Done. ${dbCount} active fusions in DB.`);
+  console.log(`\nDone. ${dbCount} active fusions in DB.`);
 
   await mongoose.disconnect();
 }
