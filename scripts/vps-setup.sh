@@ -27,6 +27,11 @@ chmod 700 /home/$DEPLOY_USER/.ssh
 chmod 600 /home/$DEPLOY_USER/.ssh/authorized_keys
 chown -R $DEPLOY_USER:$DEPLOY_USER /home/$DEPLOY_USER/.ssh
 
+# Grant sudo access (passwordless, since password auth is disabled)
+usermod -aG sudo "$DEPLOY_USER"
+echo "$DEPLOY_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$DEPLOY_USER
+chmod 440 /etc/sudoers.d/$DEPLOY_USER
+
 # --- 2. Harden SSH ---
 echo "==> Hardening SSH..."
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
