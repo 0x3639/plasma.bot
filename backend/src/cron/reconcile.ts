@@ -49,6 +49,7 @@ export async function reconcileFusionIds(): Promise<void> {
 
       if (entryBeneficiary === dbFusion.beneficiary && entryAmount === dbFusion.qsrAmount) {
         dbFusion.fusionId = entryId;
+        dbFusion.expirationHeight = Number(entry.expirationHeight || 0);
         await dbFusion.save();
         usedFusionIds.add(entryId);
         reconciled++;

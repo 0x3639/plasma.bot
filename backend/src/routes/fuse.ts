@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { validateBody, fuseRequestSchema, type FuseRequestBody } from '../middleware/validate.js';
 import { ipRateLimiter, addressRateLimiter } from '../middleware/rateLimiter.js';
 import { fuseToAddress } from '../services/plasma.js';
-import { getAvailableQsr } from '../services/balance.js';
+import { getAvailableQsr, reserveQsr, releaseQsr } from '../services/balance.js';
 import { getNextUnfuseTime } from '../services/unfuse.js';
 import { CONFIG, type FuseTier } from '../config/index.js';
 import { FuseRequest } from '../models/FuseRequest.js';
@@ -27,32 +27,35 @@ router.post(
       status: 'processing',
     });
 
-    try {
-      const tierQsr = CONFIG.FUSE_TIERS[tier as FuseTier].qsr;
-      const available = await getAvailableQsr();
+    const tierQsr = CONFIG.FUSE_TIERS[tier as FuseTier].qsr;
+    const available = await getAvailableQsr();
 
-      if (available < tierQsr) {
-        fuseRequest.status = 'failed';
-        fuseRequest.errorMessage = 'Insufficient QSR balance for this tier';
-        await fuseRequest.save();
+    if (available < tierQsr) {
+      fuseRequest.status = 'failed';
+      fuseRequest.errorMessage = 'Insufficient QSR balance for this tier';
+      await fuseRequest.save();
 
-        // Build a helpful error message
-        const nextUnfuse = await getNextUnfuseTime();
-        let error = `Not enough QSR available for the ${tier} tier (${tierQsr} QSR needed, ${available} available).`;
+      // Build a helpful error message
+      const nextUnfuse = await getNextUnfuseTime();
+      let error = `Not enough QSR available for the ${tier} tier (${tierQsr} QSR needed, ${available} available).`;
 
-        if (available >= 20 && tierQsr > 20) {
-          error += ' Try selecting a lower tier.';
-        } else if (nextUnfuse) {
-          const hoursRemaining = Math.max(1, Math.ceil((nextUnfuse.getTime() - Date.now()) / (60 * 60 * 1000)));
-          error += ` QSR will be reclaimed in ~${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}. Please try again later.`;
-        } else {
-          error += ' Please try again later.';
-        }
-
-        res.status(503).json({ error });
-        return;
+      if (available >= 20 && tierQsr > 20) {
+        error += ' Try selecting a lower tier.';
+      } else if (nextUnfuse) {
+        const hoursRemaining = Math.max(1, Math.ceil((nextUnfuse.getTime() - Date.now()) / (60 * 60 * 1000)));
+        error += ` QSR will be reclaimed in ~${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}. Please try again later.`;
+      } else {
+        error += ' Please try again later.';
       }
 
+      res.status(503).json({ error });
+      return;
+    }
+
+    // Reserve QSR so concurrent requests see reduced availability
+    reserveQsr(tierQsr);
+
+    try {
       // Execute the fusion
       const fusion = await fuseToAddress(address, tier as FuseTier);
 
@@ -76,6 +79,9 @@ router.post(
       res.status(500).json({
         error: 'Failed to fuse plasma. Please try again later.',
       });
+    } finally {
+      // Always release reservation — chain balance now reflects the result
+      releaseQsr(tierQsr);
     }
   },
 );

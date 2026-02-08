@@ -19,7 +19,15 @@ export function AlertBanner({ type, message, txHash, onDismiss }: AlertBannerPro
           <p className="font-medium">{message}</p>
           {txHash && (
             <p className="font-mono text-xs mt-1 opacity-80 break-all">
-              TX: {txHash}
+              TX:{' '}
+              <a
+                href={`https://zenonhub.io/explorer/transaction/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:opacity-100"
+              >
+                {txHash}
+              </a>
             </p>
           )}
         </div>

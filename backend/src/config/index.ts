@@ -36,9 +36,6 @@ export const CONFIG = {
   BALANCE_CHECK_INTERVAL_MS: 5 * 60 * 1000,  // 5 minutes
   RECEIVE_CHECK_INTERVAL_MS: 10 * 60 * 1000, // 10 minutes
 
-  // Minimum fuse duration before unfusing is allowed (configurable in hours)
-  MIN_FUSE_DURATION_MS: parseInt(process.env.MIN_FUSE_DURATION_HOURS || '12', 10) * 60 * 60 * 1000,
-
   // Pagination defaults
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,

@@ -2,6 +2,7 @@ import mongoose, { Schema, type Document } from 'mongoose';
 
 export interface IFusion extends Document {
   fusionId: string | null;
+  expirationHeight: number | null;
   beneficiary: string;
   tier: 'low' | 'medium' | 'high';
   qsrAmount: number;
@@ -17,6 +18,10 @@ const fusionSchema = new Schema<IFusion>({
   fusionId: {
     type: String,
     index: true,
+    default: null,
+  },
+  expirationHeight: {
+    type: Number,
     default: null,
   },
   beneficiary: {

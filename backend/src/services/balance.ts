@@ -2,7 +2,25 @@ import { QSR_ZTS } from 'znn-typescript-sdk';
 import { getZenon } from './zenon.js';
 import { getWalletAddress } from './wallet.js';
 import { CONFIG } from '../config/index.js';
-import { logger } from '../utils/logger.js';
+
+/**
+ * In-memory QSR reservation for in-flight fuse transactions.
+ * Prevents concurrent requests from both passing the balance check
+ * before the chain has updated.
+ */
+let reservedQsr = 0;
+
+export function reserveQsr(amount: number): void {
+  reservedQsr += amount;
+}
+
+export function releaseQsr(amount: number): void {
+  reservedQsr = Math.max(0, reservedQsr - amount);
+}
+
+export function getReservedQsr(): number {
+  return reservedQsr;
+}
 
 /**
  * Get the current QSR balance of the bot's wallet in human-readable units.
@@ -46,15 +64,15 @@ export async function isAboveThreshold(): Promise<boolean> {
  */
 export async function canAffordFusion(tierQsr: number): Promise<boolean> {
   const balance = await getQsrBalance();
-  return balance >= tierQsr;
+  return (balance - reservedQsr) >= tierQsr;
 }
 
 /**
- * Get the QSR available for fusing (full wallet balance).
+ * Get the QSR available for fusing (wallet balance minus in-flight reservations).
  * Users can fuse until the wallet is empty. The BALANCE_THRESHOLD_QSR
  * only controls when the bot starts unfusing old fusions to reclaim QSR.
  */
 export async function getAvailableQsr(): Promise<number> {
   const balance = await getQsrBalance();
-  return Math.max(0, balance);
+  return Math.max(0, balance - reservedQsr);
 }

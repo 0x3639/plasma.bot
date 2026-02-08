@@ -41,17 +41,24 @@ async function main() {
     const beneficiary = entry.beneficiary?.toString() || 'unknown';
     const qsrAmount = Number(entry.qsrAmount?.toString() || '0');
     const qsrHuman = qsrAmount / Math.pow(10, CONFIG.QSR_DECIMALS);
-    const isRevocable = entry.isRevocable;
+    const expHeight = Number(entry.expirationHeight || 0);
 
     console.log(`  FusionID: ${fusionId}`);
     console.log(`  Beneficiary: ${beneficiary}`);
     console.log(`  Amount: ${qsrHuman} QSR (${qsrAmount} base units)`);
-    console.log(`  Revocable: ${isRevocable}`);
+    console.log(`  ExpirationHeight: ${expHeight}`);
 
     // Check if already in DB
     const existing = await Fusion.findOne({ fusionId });
     if (existing) {
-      console.log(`  DB Status: Already exists (status: ${existing.status})`);
+      // Update expirationHeight if missing
+      if (!existing.expirationHeight && expHeight) {
+        existing.expirationHeight = expHeight;
+        await existing.save();
+        console.log(`  DB Status: Updated expirationHeight to ${expHeight}`);
+      } else {
+        console.log(`  DB Status: Already exists (status: ${existing.status})`);
+      }
     } else {
       // Determine tier from amount
       let tier: 'low' | 'medium' | 'high' = 'low';
@@ -60,12 +67,13 @@ async function main() {
 
       await Fusion.create({
         fusionId,
+        expirationHeight: expHeight,
         beneficiary,
         tier,
         qsrAmount,
-        txHash: fusionId, // Use fusionId as placeholder since we don't have the original tx hash
+        txHash: fusionId,
         status: 'active',
-        fusedAt: new Date(), // We don't know the exact time, use now
+        fusedAt: new Date(),
       });
       console.log(`  DB Status: CREATED (tier: ${tier})`);
     }
