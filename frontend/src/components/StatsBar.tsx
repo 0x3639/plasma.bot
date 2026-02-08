@@ -41,16 +41,16 @@ export function StatsBar() {
       </div>
 
       {/* QSR Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-bg-card border border-border rounded-xl p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
-          <p className="text-text-secondary text-sm mb-1 uppercase tracking-wider">QSR Available</p>
-          <p className="font-mono text-3xl font-bold text-green-primary">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="bg-bg-card border border-border rounded-xl p-4 sm:p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
+          <p className="text-text-secondary text-xs sm:text-sm mb-1 uppercase tracking-wider">QSR Available</p>
+          <p className="font-mono text-2xl sm:text-3xl font-bold text-green-primary">
             {isLoading ? '...' : data?.qsrAvailable.toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </p>
         </div>
-        <div className="bg-bg-card border border-border rounded-xl p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
-          <p className="text-text-secondary text-sm mb-1 uppercase tracking-wider">QSR Fused</p>
-          <p className="font-mono text-3xl font-bold text-green-primary">
+        <div className="bg-bg-card border border-border rounded-xl p-4 sm:p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
+          <p className="text-text-secondary text-xs sm:text-sm mb-1 uppercase tracking-wider">QSR Fused</p>
+          <p className="font-mono text-2xl sm:text-3xl font-bold text-green-primary">
             {isLoading ? '...' : data?.qsrFused.toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </p>
         </div>

@@ -73,8 +73,8 @@ export function Home() {
         {/* Header */}
         <div className="text-center mb-10">
           <div className="flex items-center justify-center gap-2 mb-3">
-            <span className="text-green-primary text-3xl">&#9889;</span>
-            <h1 className="text-3xl font-bold text-text-primary">Plasma Bot</h1>
+            <span className="text-green-primary text-2xl sm:text-3xl">&#9889;</span>
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Plasma Bot</h1>
           </div>
           <p className="text-text-secondary text-sm max-w-md mx-auto">
             Fuse QSR to generate plasma for your Zenon address.
