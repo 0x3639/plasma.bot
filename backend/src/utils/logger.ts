@@ -7,7 +7,7 @@ const SENSITIVE_PATTERNS = [
   { regex: /ADMIN_API_KEY\s*[:=]\s*\S+/gi, replacement: 'ADMIN_API_KEY=[REDACTED]' },
 ];
 
-function sanitize(value: unknown): unknown {
+export function sanitize(value: unknown): unknown {
   if (typeof value === 'string') {
     let sanitized = value;
     for (const { regex, replacement } of SENSITIVE_PATTERNS) {

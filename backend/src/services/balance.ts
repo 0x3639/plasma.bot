@@ -91,3 +91,8 @@ export async function getAvailableQsr(): Promise<number> {
   const balance = await getQsrBalance();
   return Math.max(0, balance - reservedQsr);
 }
+
+/** @internal Reset reservation counter for testing. */
+export function _resetForTesting(): void {
+  reservedQsr = 0;
+}
