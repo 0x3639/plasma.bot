@@ -12,6 +12,9 @@ export const CONFIG = {
   KEYFILE_PATH: process.env.KEYFILE_PATH || '/etc/plasma-bot/wallet.json',
   KEYFILE_PASSWORD: process.env.KEYFILE_PASSWORD || '',
 
+  // Admin
+  ADMIN_API_KEY: process.env.ADMIN_API_KEY || '',
+
   // MongoDB
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/plasma-bot',
 

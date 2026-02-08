@@ -76,7 +76,14 @@ export function FusionTable() {
                 className="border-b border-border/50 last:border-0 hover:bg-bg-card-hover transition-colors"
               >
                 <td className="px-5 py-3 font-mono text-text-primary text-xs">
-                  {truncateAddress(fusion.beneficiary)}
+                  <a
+                    href={`https://zenonhub.io/explorer/account/${fusion.beneficiary}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-green-primary hover:underline transition-colors"
+                  >
+                    {truncateAddress(fusion.beneficiary)}
+                  </a>
                 </td>
                 <td className="px-5 py-3 font-mono text-right text-text-primary">
                   {fusion.qsrAmount}

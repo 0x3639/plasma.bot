@@ -3,9 +3,13 @@ import { receiveAllPending } from '../services/receiveTx.js';
 import { reconcileFusionIds } from '../cron/reconcile.js';
 import { runUnfuseCycle } from '../services/unfuse.js';
 import { getQsrBalance } from '../services/balance.js';
+import { adminAuth } from '../middleware/adminAuth.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
+
+// All admin routes require API key authentication
+router.use(adminAuth);
 
 // POST /api/admin/receive — force receive all pending transactions
 router.post('/receive', async (_req, res) => {

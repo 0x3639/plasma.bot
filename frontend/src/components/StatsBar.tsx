@@ -18,9 +18,18 @@ export function StatsBar() {
       <div className="bg-bg-card border border-border rounded-xl p-4">
         <p className="text-text-secondary text-xs uppercase tracking-wider mb-2">Bot Wallet Address</p>
         <div className="flex items-center gap-2">
-          <p className="font-mono text-sm text-green-primary truncate flex-1">
-            {isLoading ? '...' : data?.walletAddress}
-          </p>
+          {isLoading ? (
+            <p className="font-mono text-sm text-green-primary truncate flex-1">...</p>
+          ) : (
+            <a
+              href={`https://zenonhub.io/explorer/account/${data?.walletAddress}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm text-green-primary truncate flex-1 hover:underline"
+            >
+              {data?.walletAddress}
+            </a>
+          )}
           <button
             onClick={copyAddress}
             className="text-text-muted hover:text-green-primary transition-colors text-xs shrink-0 cursor-pointer"
