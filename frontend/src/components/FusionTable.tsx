@@ -23,11 +23,12 @@ const TIER_COLORS: Record<string, string> = {
   high: 'text-green-primary',
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 25, 100] as const;
 
 export function FusionTable() {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useFusions(page, PAGE_SIZE);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
+  const { data, isLoading } = useFusions(page, pageSize);
 
   if (isLoading) {
     return (
@@ -104,11 +105,27 @@ export function FusionTable() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+      <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+        <div className="flex items-center gap-3">
           <p className="text-text-muted text-xs">
             {total} total fusion{total !== 1 ? 's' : ''}
           </p>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+            className="bg-bg-card border border-border rounded px-2 py-1 text-xs text-text-secondary cursor-pointer focus:outline-none focus:border-green-primary transition-colors"
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size} / page
+              </option>
+            ))}
+          </select>
+        </div>
+        {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -128,8 +145,8 @@ export function FusionTable() {
               Next
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
