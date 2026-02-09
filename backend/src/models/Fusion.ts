@@ -64,7 +64,7 @@ const fusionSchema = new Schema<IFusion>({
 fusionSchema.index({ status: 1, expirationHeight: 1 }); // unfuse cycle: revocable fusions
 fusionSchema.index({ beneficiary: 1, status: 1 });       // rate limiter: active fusion per address
 fusionSchema.index({ fusionId: 1, status: 1 });           // reconciliation query
-fusionSchema.index({ fusionId: 1 }, { unique: true, sparse: true }); // prevent duplicate fusionId assignments
+fusionSchema.index({ fusionId: 1 }, { unique: true, partialFilterExpression: { fusionId: { $type: 'string' } } }); // prevent duplicate fusionId assignments
 fusionSchema.index({ txHash: 1 }, { unique: true });      // prevent duplicate tx records
 
 export const Fusion = mongoose.model<IFusion>('Fusion', fusionSchema);
