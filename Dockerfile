@@ -57,6 +57,9 @@ RUN npm ci --workspace=backend --omit=dev
 # Copy compiled backend from build stage
 COPY --from=build-backend /app/backend/dist/ backend/dist/
 
+# Copy migration scripts (plain JS, no build step needed)
+COPY backend/scripts/*.mjs backend/scripts/
+
 # Copy frontend build (extracted by deploy script into host volume for Caddy)
 COPY --from=build-frontend /app/frontend/dist/ frontend/dist/
 

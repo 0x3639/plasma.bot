@@ -76,7 +76,7 @@ jobs:
             sleep 5
 
             echo "==> Running database migrations..."
-            docker compose run --rm -T backend npx tsx scripts/migrate-indexes.ts
+            docker compose run --rm -T backend node backend/scripts/migrate-indexes.mjs
 
             echo "==> Starting all services..."
             docker compose up -d
