@@ -1,5 +1,13 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as Record<string, string>).error || `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
 export interface FuseResponse {
   success: boolean;
   txHash?: string;
@@ -47,20 +55,20 @@ export async function requestFuse(data: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  return res.json();
+  return handleResponse<FuseResponse>(res);
 }
 
 export async function getFusions(page = 1, limit = 20): Promise<FusionsResponse> {
   const res = await fetch(`${API_BASE}/api/fusions?page=${page}&limit=${limit}`);
-  return res.json();
+  return handleResponse<FusionsResponse>(res);
 }
 
 export async function getFusionsByAddress(address: string): Promise<FusionsResponse> {
   const res = await fetch(`${API_BASE}/api/fusions/${encodeURIComponent(address)}`);
-  return res.json();
+  return handleResponse<FusionsResponse>(res);
 }
 
 export async function getStats(): Promise<StatsResponse> {
   const res = await fetch(`${API_BASE}/api/stats`);
-  return res.json();
+  return handleResponse<StatsResponse>(res);
 }

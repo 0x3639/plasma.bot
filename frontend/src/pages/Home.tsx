@@ -58,8 +58,9 @@ export function Home() {
       } else {
         setAlert({ type: 'error', message: result.error || 'Fuse request failed' });
       }
-    } catch {
-      setAlert({ type: 'error', message: 'Network error. Please try again.' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Network error. Please try again.';
+      setAlert({ type: 'error', message });
     }
   };
 

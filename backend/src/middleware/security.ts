@@ -15,7 +15,6 @@ export function setupSecurity(app: Express): void {
   app.use(cors({
     origin: CONFIG.FRONTEND_URL,
     methods: ['GET', 'POST'],
-    credentials: true,
   }));
 
   app.use(express.json({ limit: '1kb' }));

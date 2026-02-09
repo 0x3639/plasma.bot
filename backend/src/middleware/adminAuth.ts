@@ -1,7 +1,14 @@
-import { timingSafeEqual } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { CONFIG } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+
+/** Hash-then-compare prevents leaking the key length via timing. */
+function safeCompare(a: string, b: string): boolean {
+  const hashA = createHash('sha256').update(a).digest();
+  const hashB = createHash('sha256').update(b).digest();
+  return timingSafeEqual(hashA, hashB);
+}
 
 export function adminAuth(req: Request, res: Response, next: NextFunction): void {
   if (!CONFIG.ADMIN_API_KEY) {
@@ -17,10 +24,7 @@ export function adminAuth(req: Request, res: Response, next: NextFunction): void
     return;
   }
 
-  const expected = Buffer.from(CONFIG.ADMIN_API_KEY);
-  const actual = Buffer.from(provided);
-
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+  if (!safeCompare(provided, CONFIG.ADMIN_API_KEY)) {
     res.status(401).json({ error: 'Invalid admin key' });
     return;
   }

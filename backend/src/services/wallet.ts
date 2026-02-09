@@ -25,8 +25,9 @@ export async function initializeWallet(): Promise<void> {
   keyPair = keyStore.getKeyPair(0);
   walletAddress = keyPair.getAddress();
 
-  // Clear password from environment to minimize exposure window
+  // Clear password from memory to minimize exposure window
   delete process.env.KEYFILE_PASSWORD;
+  (CONFIG as Record<string, unknown>).KEYFILE_PASSWORD = '';
 
   logger.info('Wallet loaded successfully', {
     address: walletAddress.toString(),

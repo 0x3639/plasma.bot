@@ -45,5 +45,7 @@ const fuseRequestSchema = new Schema<IFuseRequest>({
 }, { timestamps: true });
 
 fuseRequestSchema.index({ ipAddress: 1, createdAt: 1 });
+fuseRequestSchema.index({ beneficiary: 1, status: 1 });                       // address rate limiter
+fuseRequestSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 }); // TTL: 90 days
 
 export const FuseRequest = mongoose.model<IFuseRequest>('FuseRequest', fuseRequestSchema);
