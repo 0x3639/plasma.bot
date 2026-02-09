@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
 
   const [fusions, total] = await Promise.all([
     Fusion.find({ status: 'active' })
-      .select('beneficiary tier qsrAmount fusedAt status')
+      .select('beneficiary tier qsrAmount fusedAt status expirationHeight')
       .sort({ fusedAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -48,6 +48,7 @@ router.get('/', async (req, res) => {
     qsrAmount: f.qsrAmount / Math.pow(10, CONFIG.QSR_DECIMALS),
     fusedAt: f.fusedAt,
     status: f.status,
+    expirationHeight: f.expirationHeight ?? null,
   }));
 
   res.json({

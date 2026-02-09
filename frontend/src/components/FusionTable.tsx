@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useFusions } from '../hooks/useFusions';
+import { useFusions, useStats } from '../hooks/useFusions';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -29,6 +29,8 @@ export function FusionTable() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const { data, isLoading } = useFusions(page, pageSize);
+  const { data: statsData } = useStats();
+  const currentHeight = statsData?.currentHeight ?? 0;
 
   if (isLoading) {
     return (
@@ -65,6 +67,9 @@ export function FusionTable() {
               <th className="text-center text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
                 Tier
               </th>
+              <th className="hidden sm:table-cell text-right text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
+                Revocable
+              </th>
               <th className="text-right text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
                 Fused
               </th>
@@ -95,6 +100,15 @@ export function FusionTable() {
                   <span className={`text-xs uppercase font-medium ${TIER_COLORS[fusion.tier] || ''}`}>
                     {fusion.tier}
                   </span>
+                </td>
+                <td className="hidden sm:table-cell px-2 sm:px-4 py-3 font-mono text-right text-xs whitespace-nowrap">
+                  {fusion.expirationHeight != null ? (
+                    <span className={fusion.expirationHeight <= currentHeight ? 'text-green-primary' : 'text-error'}>
+                      {fusion.expirationHeight.toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="text-text-muted">—</span>
+                  )}
                 </td>
                 <td className="px-2 sm:px-4 py-3 text-right text-text-secondary text-xs whitespace-nowrap">
                   {timeAgo(fusion.fusedAt)}<span className="hidden sm:inline"> ago</span>

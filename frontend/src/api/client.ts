@@ -25,6 +25,7 @@ export interface FusionEntry {
   fusionId?: string;
   txHash?: string;
   unfusedAt?: string;
+  expirationHeight?: number | null;
 }
 
 export interface FusionsResponse {
@@ -44,6 +45,7 @@ export interface StatsResponse {
   activeFusionCount: number;
   availableTiers: string[];
   nextUnfuseAt: string | null;
+  currentHeight: number;
 }
 
 export async function requestFuse(data: {

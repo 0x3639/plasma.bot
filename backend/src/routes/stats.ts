@@ -5,6 +5,7 @@ import { getNextUnfuseTime } from '../services/unfuse.js';
 import { Fusion } from '../models/Fusion.js';
 import { CONFIG } from '../config/index.js';
 import { getWalletAddress } from '../services/wallet.js';
+import { getZenon } from '../services/zenon.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -21,7 +22,8 @@ router.use(rateLimit({
 // GET /api/stats — public stats for the landing page QSR banner
 router.get('/', async (_req, res) => {
   try {
-    const [qsrBalance, activeFusions, nextUnfuseAt] = await Promise.all([
+    const zenon = getZenon();
+    const [qsrBalance, activeFusions, nextUnfuseAt, frontierMomentum] = await Promise.all([
       getQsrBalance(),
       Fusion.aggregate([
         { $match: { status: 'active' } },
@@ -34,7 +36,9 @@ router.get('/', async (_req, res) => {
         },
       ]),
       getNextUnfuseTime(),
+      zenon.ledger.getFrontierMomentum(),
     ]);
+    const currentHeight = Number(frontierMomentum?.height || 0);
 
     const stats = activeFusions[0] || { totalQsrFused: 0, count: 0 };
 
@@ -54,6 +58,7 @@ router.get('/', async (_req, res) => {
       activeFusionCount: stats.count,
       availableTiers,
       nextUnfuseAt: nextUnfuseAt?.toISOString() || null,
+      currentHeight,
     });
   } catch (error) {
     logger.error('Stats endpoint failed', { error });
