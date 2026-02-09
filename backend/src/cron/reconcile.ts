@@ -61,7 +61,32 @@ export async function reconcileFusionIds(): Promise<void> {
     logger.info(`Reconciled ${reconciled} fusion IDs`);
   }
 
-  // Step 2: Detect orphaned chain entries (on-chain but no DB record at all)
+  // Step 2: Backfill expirationHeight on fusions that have fusionId but missing expirationHeight
+  // (happens when older code reconciled fusionId without setting expirationHeight)
+  const chainEntryMap = new Map<string, number>();
+  for (const entry of chainEntries.list) {
+    const expHeight = Number(entry.expirationHeight || 0);
+    if (expHeight > 0) {
+      chainEntryMap.set(entry.id.toString(), expHeight);
+    }
+  }
+
+  const missingExpHeight = await Fusion.find({
+    status: 'active',
+    fusionId: { $ne: null },
+    expirationHeight: null,
+  }).exec();
+
+  for (const fusion of missingExpHeight) {
+    const expHeight = chainEntryMap.get(fusion.fusionId!);
+    if (expHeight) {
+      fusion.expirationHeight = expHeight;
+      await fusion.save();
+      logger.info(`Backfilled expirationHeight ${expHeight} for fusion ${fusion.fusionId}`);
+    }
+  }
+
+  // Step 3: Detect orphaned chain entries (on-chain but no DB record at all)
   // This handles cases where the chain send succeeded but DB write failed,
   // or the database was out of sync.
   let orphaned = 0;
