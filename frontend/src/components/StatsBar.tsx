@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useStats } from '../hooks/useFusions';
 
+function truncateAddress(address: string, startChars = 10, endChars = 6): string {
+  if (address.length <= startChars + endChars + 3) return address;
+  return `${address.slice(0, startChars)}...${address.slice(-endChars)}`;
+}
+
 export function StatsBar() {
   const { data, isLoading } = useStats();
   const [copied, setCopied] = useState(false);
@@ -25,9 +30,9 @@ export function StatsBar() {
               href={`https://zenonhub.io/explorer/account/${data?.walletAddress}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-sm text-green-primary truncate flex-1 hover:underline"
+              className="font-mono text-sm text-green-primary flex-1 hover:underline"
             >
-              {data?.walletAddress}
+              {data?.walletAddress ? truncateAddress(data.walletAddress) : ''}
             </a>
           )}
           <button

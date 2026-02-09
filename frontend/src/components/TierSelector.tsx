@@ -7,9 +7,9 @@ interface TierSelectorProps {
 }
 
 const TIERS: { id: Tier; label: string; qsr: number; description: string }[] = [
-  { id: 'low', label: 'Low', qsr: 20, description: 'Basic transactions' },
-  { id: 'medium', label: 'Medium', qsr: 80, description: 'Regular usage' },
-  { id: 'high', label: 'High', qsr: 120, description: 'Full throughput' },
+  { id: 'low', label: 'Low', qsr: 20, description: 'Basic' },
+  { id: 'medium', label: 'Medium', qsr: 80, description: 'Regular' },
+  { id: 'high', label: 'High', qsr: 120, description: 'Full' },
 ];
 
 export function TierSelector({ selected, onSelect, availableTiers }: TierSelectorProps) {
