@@ -6,9 +6,9 @@ interface TierSelectorProps {
   availableTiers?: string[];
 }
 
-const TIERS: { id: Tier; label: string; qsr: number; description: string }[] = [
+const TIERS: { id: Tier; label: string; shortLabel?: string; qsr: number; description: string }[] = [
   { id: 'low', label: 'Low', qsr: 20, description: 'Basic' },
-  { id: 'medium', label: 'Medium', qsr: 80, description: 'Regular' },
+  { id: 'medium', label: 'Medium', shortLabel: 'Med', qsr: 80, description: 'Regular' },
   { id: 'high', label: 'High', qsr: 120, description: 'Full' },
 ];
 
@@ -38,7 +38,12 @@ export function TierSelector({ selected, onSelect, availableTiers }: TierSelecto
               }`}
             >
               <p className="text-text-secondary text-xs uppercase tracking-wider mb-1">
-                {tier.label}
+                {tier.shortLabel ? (
+                  <>
+                    <span className="sm:hidden">{tier.shortLabel}</span>
+                    <span className="hidden sm:inline">{tier.label}</span>
+                  </>
+                ) : tier.label}
               </p>
               <p className="font-mono text-2xl font-bold text-text-primary">
                 {tier.qsr}
