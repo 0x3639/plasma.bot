@@ -48,14 +48,24 @@ async function main() {
     console.log(`  Amount: ${qsrHuman} QSR (${qsrAmount} base units)`);
     console.log(`  ExpirationHeight: ${expHeight}`);
 
-    // Check if already in DB
-    const existing = await Fusion.findOne({ fusionId });
+    // Check if already in DB (by fusionId OR txHash to prevent duplicates)
+    const existing = await Fusion.findOne({
+      $or: [{ fusionId }, { txHash: fusionId }],
+    });
     if (existing) {
-      // Update expirationHeight if missing
+      // Backfill fusionId and expirationHeight if missing
+      let updated = false;
+      if (!existing.fusionId) {
+        existing.fusionId = fusionId;
+        updated = true;
+      }
       if (!existing.expirationHeight && expHeight) {
         existing.expirationHeight = expHeight;
+        updated = true;
+      }
+      if (updated) {
         await existing.save();
-        console.log(`  DB Status: Updated expirationHeight to ${expHeight}`);
+        console.log(`  DB Status: Updated existing record (fusionId/expirationHeight)`);
       } else {
         console.log(`  DB Status: Already exists (status: ${existing.status})`);
       }
