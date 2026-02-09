@@ -74,3 +74,20 @@ export async function getStats(): Promise<StatsResponse> {
   const res = await fetch(`${API_BASE}/api/stats`);
   return handleResponse<StatsResponse>(res);
 }
+
+export interface DonationEntry {
+  address: string;
+  totalQsr: number;
+  count: number;
+}
+
+export interface DonationsResponse {
+  donations: DonationEntry[];
+  totalDonated: number;
+  donorCount: number;
+}
+
+export async function getDonations(): Promise<DonationsResponse> {
+  const res = await fetch(`${API_BASE}/api/donations`);
+  return handleResponse<DonationsResponse>(res);
+}

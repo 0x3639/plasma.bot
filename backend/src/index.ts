@@ -15,6 +15,7 @@ import statusRoutes from './routes/status.js';
 import statsRoutes from './routes/stats.js';
 import healthRoutes from './routes/health.js';
 import adminRoutes from './routes/admin.js';
+import donationRoutes from './routes/donations.js';
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use('/api/fusions', statusRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/donations', donationRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

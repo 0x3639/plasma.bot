@@ -4,6 +4,7 @@ import { AddressInput } from '../components/AddressInput';
 import { TierSelector } from '../components/TierSelector';
 import { FusionTable } from '../components/FusionTable';
 import { AlertBanner } from '../components/AlertBanner';
+import { DonationSection } from '../components/DonationSection';
 import { useFuseRequest } from '../hooks/useFuseRequest';
 import { useStats } from '../hooks/useFusions';
 
@@ -161,6 +162,9 @@ export function Home() {
             </div>
           </div>
         </div>
+
+        {/* Donations */}
+        <DonationSection />
 
         <p className="text-center text-text-muted text-xs mt-8">
           Powered by the Network of Momentum
