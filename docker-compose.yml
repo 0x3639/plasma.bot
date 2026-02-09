@@ -16,6 +16,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
+      - /etc/plasma-bot/secrets.env
     volumes:
       - /etc/plasma-bot/wallet.json:/etc/plasma-bot/wallet.json:ro
     depends_on:

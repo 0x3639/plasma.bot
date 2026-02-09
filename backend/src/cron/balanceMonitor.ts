@@ -12,13 +12,16 @@ async function runCycle(): Promise<void> {
   isRunning = true;
   try {
     // Step 1: Receive any pending transactions
-    await receiveAllPending();
+    try { await receiveAllPending(); }
+    catch (error) { logger.error('Receive step failed', { error }); }
 
-    // Step 2: Reconcile fusion IDs
-    await reconcileFusionIds();
+    // Step 2: Reconcile fusion IDs (also creates DB records for orphaned chain entries)
+    try { await reconcileFusionIds(); }
+    catch (error) { logger.error('Reconcile step failed', { error }); }
 
     // Step 3: Run unfuse cycle if balance is low
-    await runUnfuseCycle();
+    try { await runUnfuseCycle(); }
+    catch (error) { logger.error('Unfuse step failed', { error }); }
   } catch (error) {
     logger.error('Balance monitor cycle failed', { error });
   } finally {

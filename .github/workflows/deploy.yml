@@ -46,20 +46,25 @@ jobs:
             echo "==> Pulling latest code..."
             git pull origin main
 
-            echo "==> Writing .env.production from secrets..."
+            echo "==> Writing .env.production (non-sensitive config)..."
             cat > .env.production << 'ENVEOF'
             PORT=3001
             NODE_ENV=production
             FRONTEND_URL=${{ secrets.FRONTEND_URL }}
             ZNN_NODE_URL=${{ secrets.ZNN_NODE_URL }}
             KEYFILE_PATH=/etc/plasma-bot/wallet.json
-            KEYFILE_PASSWORD=${{ secrets.KEYFILE_PASSWORD }}
             MONGODB_URI=${{ secrets.MONGODB_URI }}
-            ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}
             RATE_LIMIT_PER_IP_MAX=4
             BALANCE_THRESHOLD_QSR=500
             ENVEOF
             chmod 600 .env.production
+
+            echo "==> Writing secrets to /etc/plasma-bot/secrets.env..."
+            cat > /etc/plasma-bot/secrets.env << 'SECRETSEOF'
+            KEYFILE_PASSWORD=${{ secrets.KEYFILE_PASSWORD }}
+            ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}
+            SECRETSEOF
+            chmod 600 /etc/plasma-bot/secrets.env
 
             echo "==> Building Docker images..."
             docker compose build

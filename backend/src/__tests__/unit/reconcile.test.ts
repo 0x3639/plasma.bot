@@ -24,9 +24,10 @@ describe('reconcileFusionIds', () => {
     vi.clearAllMocks();
   });
 
-  it('does nothing when there are no unreconciled fusions', async () => {
+  it('does nothing when chain returns no entries', async () => {
+    mockGetEntriesByAddress.mockResolvedValueOnce({ list: [] });
     await reconcileFusionIds();
-    expect(mockGetEntriesByAddress).not.toHaveBeenCalled();
+    expect(mockGetEntriesByAddress).toHaveBeenCalled();
   });
 
   it('matches chain entries to unreconciled DB records', async () => {
@@ -111,6 +112,30 @@ describe('reconcileFusionIds', () => {
     const unreconciled = await Fusion.findOne({ beneficiary: addr2 });
     expect(unreconciled?.fusionId).toBe('new-chain-id');
     expect(unreconciled?.expirationHeight).toBe(600000);
+  });
+
+  it('creates DB record for orphaned chain entry with no DB match', async () => {
+    const addr = 'z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0';
+    const qsrBase = 2000000000;
+
+    // No DB records exist — chain entry is "orphaned"
+    mockGetEntriesByAddress.mockResolvedValueOnce({
+      list: [createMockFusionEntry({
+        id: 'orphan-chain-id',
+        beneficiary: addr,
+        qsrAmount: qsrBase,
+        expirationHeight: 700000,
+      })],
+    });
+
+    await reconcileFusionIds();
+
+    const created = await Fusion.findOne({ fusionId: 'orphan-chain-id' });
+    expect(created).not.toBeNull();
+    expect(created?.beneficiary).toBe(addr);
+    expect(created?.qsrAmount).toBe(qsrBase);
+    expect(created?.expirationHeight).toBe(700000);
+    expect(created?.status).toBe('active');
   });
 
   it('handles empty chain entry list gracefully', async () => {
