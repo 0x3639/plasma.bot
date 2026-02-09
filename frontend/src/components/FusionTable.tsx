@@ -4,17 +4,17 @@ import { useFusions } from '../hooks/useFusions';
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return `${days}d`;
 }
 
 function truncateAddress(addr: string): string {
-  if (addr.length <= 16) return addr;
-  return `${addr.slice(0, 10)}...${addr.slice(-6)}`;
+  if (addr.length <= 12) return addr;
+  return `${addr.slice(0, 3)}...${addr.slice(-5)}`;
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -56,16 +56,16 @@ export function FusionTable() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left text-text-secondary text-xs uppercase tracking-wider px-3 sm:px-5 py-3 font-medium">
+              <th className="text-left text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
                 Address
               </th>
-              <th className="text-right text-text-secondary text-xs uppercase tracking-wider px-3 sm:px-5 py-3 font-medium">
+              <th className="text-right text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
                 Amount
               </th>
-              <th className="text-center text-text-secondary text-xs uppercase tracking-wider px-3 sm:px-5 py-3 font-medium">
+              <th className="text-center text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
                 Tier
               </th>
-              <th className="text-right text-text-secondary text-xs uppercase tracking-wider px-3 sm:px-5 py-3 font-medium">
+              <th className="text-right text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
                 Fused
               </th>
             </tr>
@@ -76,7 +76,7 @@ export function FusionTable() {
                 key={`${fusion.beneficiary}-${i}`}
                 className="border-b border-border/50 last:border-0 hover:bg-bg-card-hover transition-colors"
               >
-                <td className="px-3 sm:px-5 py-3 font-mono text-text-primary text-xs">
+                <td className="px-2 sm:px-4 py-3 font-mono text-text-primary text-xs">
                   <a
                     href={`https://zenonhub.io/explorer/account/${fusion.beneficiary}`}
                     target="_blank"
@@ -86,16 +86,16 @@ export function FusionTable() {
                     {truncateAddress(fusion.beneficiary)}
                   </a>
                 </td>
-                <td className="px-3 sm:px-5 py-3 font-mono text-right text-text-primary">
+                <td className="px-2 sm:px-4 py-3 font-mono text-right text-text-primary">
                   {fusion.qsrAmount}
                   <span className="text-text-muted ml-1">QSR</span>
                 </td>
-                <td className="px-3 sm:px-5 py-3 text-center">
+                <td className="px-2 sm:px-4 py-3 text-center">
                   <span className={`text-xs uppercase font-medium ${TIER_COLORS[fusion.tier] || ''}`}>
                     {fusion.tier}
                   </span>
                 </td>
-                <td className="px-3 sm:px-5 py-3 text-right text-text-secondary text-xs">
+                <td className="px-2 sm:px-4 py-3 text-right text-text-secondary text-xs">
                   {timeAgo(fusion.fusedAt)}
                 </td>
               </tr>
@@ -105,7 +105,7 @@ export function FusionTable() {
       </div>
 
       {/* Pagination */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-3 border-t border-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-2 sm:px-4 py-3 border-t border-border">
         <div className="flex items-center gap-3">
           <p className="text-text-muted text-xs">
             {total} total fusion{total !== 1 ? 's' : ''}
