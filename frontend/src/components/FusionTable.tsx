@@ -12,9 +12,9 @@ function timeAgo(dateStr: string): string {
   return `${days}d`;
 }
 
-function truncateAddress(addr: string): string {
-  if (addr.length <= 12) return addr;
-  return `${addr.slice(0, 3)}...${addr.slice(-5)}`;
+function truncateAddress(addr: string, startChars: number, endChars: number): string {
+  if (addr.length <= startChars + endChars + 3) return addr;
+  return `${addr.slice(0, startChars)}...${addr.slice(-endChars)}`;
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -83,7 +83,8 @@ export function FusionTable() {
                     rel="noopener noreferrer"
                     className="hover:text-green-primary hover:underline transition-colors"
                   >
-                    {truncateAddress(fusion.beneficiary)}
+                    <span className="sm:hidden">{truncateAddress(fusion.beneficiary, 3, 5)}</span>
+                    <span className="hidden sm:inline">{truncateAddress(fusion.beneficiary, 6, 6)}</span>
                   </a>
                 </td>
                 <td className="px-2 sm:px-4 py-3 font-mono text-right text-text-primary">
@@ -95,8 +96,8 @@ export function FusionTable() {
                     {fusion.tier}
                   </span>
                 </td>
-                <td className="px-2 sm:px-4 py-3 text-right text-text-secondary text-xs">
-                  {timeAgo(fusion.fusedAt)}
+                <td className="px-2 sm:px-4 py-3 text-right text-text-secondary text-xs whitespace-nowrap">
+                  {timeAgo(fusion.fusedAt)}<span className="hidden sm:inline"> ago</span>
                 </td>
               </tr>
             ))}
