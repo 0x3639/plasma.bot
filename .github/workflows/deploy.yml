@@ -71,7 +71,14 @@ jobs:
             docker cp "$CONTAINER_ID:/app/frontend/dist/." ./frontend-dist/
             docker rm "$CONTAINER_ID"
 
-            echo "==> Restarting services..."
+            echo "==> Starting MongoDB..."
+            docker compose up -d mongodb
+            sleep 5
+
+            echo "==> Running database migrations..."
+            docker compose run --rm -T backend npx tsx scripts/migrate-indexes.ts
+
+            echo "==> Starting all services..."
             docker compose up -d
 
             echo "==> Waiting for backend to start..."
