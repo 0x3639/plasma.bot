@@ -1,5 +1,4 @@
-# Replace yourdomain.com with your actual domain
-yourdomain.com {
+plasmabot.zenon.info {
 	# API reverse proxy
 	handle /api/* {
 		reverse_proxy backend:3001 {
@@ -12,7 +11,17 @@ yourdomain.com {
 	# Frontend static files (SPA)
 	handle {
 		root * /srv/frontend
+
+		# Hashed Vite assets: cache forever (immutable filenames)
+		@hashed path /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+		# HTML: always revalidate to pick up new deploys
+		@html path /
+		header @html Cache-Control "no-cache"
+
 		try_files {path} /index.html
+		encode zstd gzip
 		file_server
 	}
 
