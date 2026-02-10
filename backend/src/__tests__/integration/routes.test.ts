@@ -75,7 +75,7 @@ import { setupSecurity } from '../../middleware/security.js';
 import { errorHandler } from '../../middleware/errorHandler.js';
 import fuseRoutes from '../../routes/fuse.js';
 import statusRoutes from '../../routes/status.js';
-import statsRoutes from '../../routes/stats.js';
+import statsRoutes, { resetStatsCache } from '../../routes/stats.js';
 import healthRoutes from '../../routes/health.js';
 import adminRoutes from '../../routes/admin.js';
 
@@ -94,6 +94,7 @@ function createApp() {
 describe('Route Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetStatsCache();
     mockGetAccountInfo.mockResolvedValue(createMockAccountInfo(1000));
     mockGetEntriesByAddress.mockResolvedValue({ list: [] });
   });

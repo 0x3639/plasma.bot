@@ -10,6 +10,16 @@ import { logger } from '../utils/logger.js';
 
 const router = Router();
 
+// In-memory cache: collapses N clients polling every 10s into 1 node query per 5s
+let cachedStats: Record<string, unknown> | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 1000; // 5 seconds
+
+export function resetStatsCache(): void {
+  cachedStats = null;
+  cacheTimestamp = 0;
+}
+
 // Rate limit public read endpoints: 100 requests per minute per IP
 router.use(rateLimit({
   windowMs: 60 * 1000,
@@ -22,6 +32,11 @@ router.use(rateLimit({
 // GET /api/stats — public stats for the landing page QSR banner
 router.get('/', async (_req, res) => {
   try {
+    const now = Date.now();
+    if (cachedStats && now - cacheTimestamp < CACHE_TTL_MS) {
+      return res.json(cachedStats);
+    }
+
     const zenon = getZenon();
     const [qsrBalance, activeFusions, nextUnfuseAt, frontierMomentum] = await Promise.all([
       getQsrBalance(),
@@ -50,7 +65,7 @@ router.get('/', async (_req, res) => {
       }
     }
 
-    res.json({
+    const result = {
       walletAddress: getWalletAddress().toString(),
       qsrAvailable: qsrBalance,
       qsrFused: stats.totalQsrFused / Math.pow(10, CONFIG.QSR_DECIMALS),
@@ -59,7 +74,12 @@ router.get('/', async (_req, res) => {
       availableTiers,
       nextUnfuseAt: nextUnfuseAt?.toISOString() || null,
       currentHeight,
-    });
+    };
+
+    cachedStats = result;
+    cacheTimestamp = Date.now();
+
+    res.json(result);
   } catch (error) {
     logger.error('Stats endpoint failed', { error });
     res.status(503).json({ error: 'Node connection unavailable. Please try again.' });
