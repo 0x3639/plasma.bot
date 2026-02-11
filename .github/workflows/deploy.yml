@@ -44,7 +44,9 @@ jobs:
             cd /opt/plasma-bot
 
             echo "==> Pulling latest code..."
-            git pull origin main
+            OLD_CADDY_HASH=$(md5sum Caddyfile | cut -d' ' -f1)
+            git fetch origin main
+            git reset --hard origin/main
 
             echo "==> Writing .env.production (non-sensitive config)..."
             cat > .env.production << 'ENVEOF'
@@ -59,12 +61,12 @@ jobs:
             ENVEOF
             chmod 600 .env.production
 
-            echo "==> Writing secrets to /etc/plasma-bot/secrets.env..."
-            cat > /etc/plasma-bot/secrets.env << 'SECRETSEOF'
-            KEYFILE_PASSWORD=${{ secrets.KEYFILE_PASSWORD }}
-            ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}
-            SECRETSEOF
-            chmod 600 /etc/plasma-bot/secrets.env
+            echo "==> Removing secrets.env if it exists..."
+            rm -f /etc/plasma-bot/secrets.env
+
+            echo "==> Exporting secrets as env vars..."
+            export KEYFILE_PASSWORD='${{ secrets.KEYFILE_PASSWORD }}'
+            export ADMIN_API_KEY='${{ secrets.ADMIN_API_KEY }}'
 
             echo "==> Building Docker images..."
             docker compose build
@@ -85,6 +87,13 @@ jobs:
 
             echo "==> Starting all services..."
             docker compose up -d
+
+            echo "==> Checking if Caddy config changed..."
+            NEW_CADDY_HASH=$(md5sum Caddyfile | cut -d' ' -f1)
+            if [ "$OLD_CADDY_HASH" != "$NEW_CADDY_HASH" ]; then
+              echo "==> Caddyfile changed, reloading Caddy..."
+              docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+            fi
 
             echo "==> Waiting for backend to start..."
             sleep 10

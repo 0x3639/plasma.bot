@@ -16,7 +16,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
-      - /etc/plasma-bot/secrets.env
+    environment:
+      - KEYFILE_PASSWORD=${KEYFILE_PASSWORD}
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
     volumes:
       - /etc/plasma-bot/wallet.json:/etc/plasma-bot/wallet.json:ro
     depends_on:
