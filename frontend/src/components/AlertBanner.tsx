@@ -8,6 +8,7 @@ interface AlertBannerProps {
 export function AlertBanner({ type, message, txHash, onDismiss }: AlertBannerProps) {
   return (
     <div
+      role="alert"
       className={`mb-6 rounded-xl border p-4 ${
         type === 'success'
           ? 'bg-green-badge border-green-primary/30 text-green-primary'
@@ -34,6 +35,7 @@ export function AlertBanner({ type, message, txHash, onDismiss }: AlertBannerPro
         {onDismiss && (
           <button
             onClick={onDismiss}
+            aria-label="Dismiss"
             className="text-current opacity-60 hover:opacity-100 ml-4 text-lg leading-none cursor-pointer"
           >
             &times;

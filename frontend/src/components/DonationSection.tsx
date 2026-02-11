@@ -46,6 +46,7 @@ export function DonationSection() {
             onClick={copyAddress}
             className="text-text-muted hover:text-green-primary transition-colors text-xs shrink-0 cursor-pointer"
             title="Copy address"
+            aria-label="Copy address"
           >
             {copied ? 'Copied!' : 'Copy'}
           </button>

@@ -10,11 +10,12 @@ export function AddressInput({ value, onChange, error }: AddressInputProps) {
 
   return (
     <div className="mb-5">
-      <label className="block text-text-secondary text-sm mb-2 uppercase tracking-wider">
+      <label htmlFor="address-input" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
         Zenon Address
       </label>
       <div className="relative">
         <input
+          id="address-input"
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value.toLowerCase())}

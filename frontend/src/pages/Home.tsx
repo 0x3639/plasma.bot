@@ -66,12 +66,12 @@ export function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-primary">
-      <div className="max-w-2xl mx-auto px-4 py-12">
+    <main className="min-h-screen bg-bg-primary">
+      <div className="max-w-2xl mx-auto px-4 py-6 sm:py-12">
         {/* Header */}
         <div className="text-center mb-10">
           <div className="flex items-center justify-center gap-2 mb-3">
-            <span className="text-green-primary text-2xl sm:text-3xl">&#9889;</span>
+            <span className="text-green-primary text-2xl sm:text-3xl" aria-hidden="true">&#9889;</span>
             <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Plasma Bot</h1>
           </div>
           <p className="text-text-secondary text-sm max-w-md mx-auto">
@@ -139,7 +139,7 @@ export function Home() {
 
         {/* Footer / FAQ */}
         <div className="bg-bg-card border border-border rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-text-primary mb-3 uppercase tracking-wider">
+          <h3 className="text-base font-semibold text-text-primary mb-3">
             What is Plasma?
           </h3>
           <p className="text-text-secondary text-sm leading-relaxed mb-4">
@@ -149,15 +149,15 @@ export function Home() {
           </p>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="bg-bg-primary rounded-lg p-3">
-              <p className="font-mono text-green-primary font-bold">20</p>
+              <p className="font-mono text-lg text-green-primary font-bold">20</p>
               <p className="text-text-muted text-xs">Low QSR</p>
             </div>
             <div className="bg-bg-primary rounded-lg p-3">
-              <p className="font-mono text-green-dim font-bold">80</p>
+              <p className="font-mono text-lg text-green-dim font-bold">80</p>
               <p className="text-text-muted text-xs">Medium QSR</p>
             </div>
             <div className="bg-bg-primary rounded-lg p-3">
-              <p className="font-mono text-green-primary font-bold">120</p>
+              <p className="font-mono text-lg text-green-primary font-bold">120</p>
               <p className="text-text-muted text-xs">High QSR</p>
             </div>
           </div>
@@ -170,6 +170,6 @@ export function Home() {
           Powered by the Network of Momentum
         </p>
       </div>
-    </div>
+    </main>
   );
 }
