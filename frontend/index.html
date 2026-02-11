@@ -30,6 +30,15 @@
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" /></noscript>
     <title>Plasma Bot — Zenon Network</title>
+
+    <!-- Prefetch API data in parallel with JS bundle to break dependency chain -->
+    <script>
+      window.__prefetch = {
+        '/api/stats': fetch('/api/stats'),
+        '/api/fusions?page=1&limit=10': fetch('/api/fusions?page=1&limit=10'),
+        '/api/donations': fetch('/api/donations'),
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>

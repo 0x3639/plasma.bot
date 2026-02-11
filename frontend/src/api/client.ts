@@ -1,5 +1,18 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+/** Consume a prefetched response (started in index.html), if available. */
+function consumePrefetch(url: string): Promise<Response> | null {
+  const store = (window as unknown as Record<string, unknown>).__prefetch as
+    | Record<string, Promise<Response>>
+    | undefined;
+  if (store?.[url]) {
+    const promise = store[url];
+    delete store[url];
+    return promise;
+  }
+  return null;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -61,7 +74,8 @@ export async function requestFuse(data: {
 }
 
 export async function getFusions(page = 1, limit = 20): Promise<FusionsResponse> {
-  const res = await fetch(`${API_BASE}/api/fusions?page=${page}&limit=${limit}`);
+  const url = `/api/fusions?page=${page}&limit=${limit}`;
+  const res = await (consumePrefetch(url) ?? fetch(`${API_BASE}${url}`));
   return handleResponse<FusionsResponse>(res);
 }
 
@@ -71,7 +85,8 @@ export async function getFusionsByAddress(address: string): Promise<FusionsRespo
 }
 
 export async function getStats(): Promise<StatsResponse> {
-  const res = await fetch(`${API_BASE}/api/stats`);
+  const url = '/api/stats';
+  const res = await (consumePrefetch(url) ?? fetch(`${API_BASE}${url}`));
   return handleResponse<StatsResponse>(res);
 }
 
@@ -88,6 +103,7 @@ export interface DonationsResponse {
 }
 
 export async function getDonations(): Promise<DonationsResponse> {
-  const res = await fetch(`${API_BASE}/api/donations`);
+  const url = '/api/donations';
+  const res = await (consumePrefetch(url) ?? fetch(`${API_BASE}${url}`));
   return handleResponse<DonationsResponse>(res);
 }
