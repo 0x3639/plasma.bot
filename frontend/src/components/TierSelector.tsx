@@ -15,7 +15,7 @@ const TIERS: { id: Tier; label: string; shortLabel?: string; qsr: number; descri
 export function TierSelector({ selected, onSelect, availableTiers }: TierSelectorProps) {
   return (
     <div className="mb-5">
-      <label className="block text-text-secondary text-sm mb-2 uppercase tracking-wider">
+      <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
         Plasma Tier
       </label>
       <div className="grid grid-cols-3 gap-3">
@@ -29,6 +29,7 @@ export function TierSelector({ selected, onSelect, availableTiers }: TierSelecto
               type="button"
               onClick={() => isAvailable && onSelect(tier.id)}
               disabled={!isAvailable}
+              aria-pressed={isSelected}
               className={`relative bg-bg-card border rounded-xl p-4 text-center transition-all ${
                 !isAvailable
                   ? 'border-border opacity-40 cursor-not-allowed'
@@ -49,7 +50,7 @@ export function TierSelector({ selected, onSelect, availableTiers }: TierSelecto
                 {tier.qsr}
               </p>
               <p className="text-text-muted text-xs mt-1">QSR</p>
-              <p className="text-text-secondary text-[10px] mt-2">
+              <p className="text-text-secondary text-xs mt-2">
                 {isAvailable ? tier.description : 'Insufficient QSR'}
               </p>
             </button>

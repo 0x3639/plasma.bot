@@ -56,6 +56,7 @@ export function FusionTable() {
     <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
+          <caption className="sr-only">Active plasma fusions</caption>
           <thead>
             <tr className="border-b border-border">
               <th className="text-left text-text-secondary text-xs uppercase tracking-wider px-2 sm:px-4 py-3 font-medium">
@@ -131,6 +132,7 @@ export function FusionTable() {
               setPageSize(Number(e.target.value));
               setPage(1);
             }}
+            aria-label="Fusions per page"
             className="bg-bg-card border border-border rounded px-2 py-1 text-xs text-text-secondary cursor-pointer focus:outline-none focus:border-green-primary transition-colors"
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
