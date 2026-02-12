@@ -43,7 +43,15 @@ export async function startTelegramBot(): Promise<void> {
   bot.command('fuse', handleFuseCommand);
 
   // Launch with long-polling, drop any pending updates from before restart
-  await bot.launch({ dropPendingUpdates: true });
+  logger.info('Telegram bot launching...');
+
+  const LAUNCH_TIMEOUT_MS = 15_000;
+  const launchPromise = bot.launch({ dropPendingUpdates: true });
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Telegram bot launch timed out after ${LAUNCH_TIMEOUT_MS / 1000}s`)), LAUNCH_TIMEOUT_MS),
+  );
+
+  await Promise.race([launchPromise, timeoutPromise]);
 
   logger.info('Telegram bot started (long-polling)');
 }

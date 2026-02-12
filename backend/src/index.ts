@@ -55,8 +55,10 @@ async function startup(): Promise<void> {
   startBalanceMonitor();
   startReceiveMonitor();
 
-  // 5. Start Telegram bot (optional — skips if no token)
-  await startTelegramBot();
+  // 5. Start Telegram bot (optional — non-blocking, never delays HTTP server)
+  startTelegramBot().catch((error) => {
+    logger.error('Telegram bot failed to start', { error });
+  });
 
   // 6. Start HTTP server
   app.listen(CONFIG.PORT, () => {
