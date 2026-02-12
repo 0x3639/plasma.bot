@@ -16,19 +16,13 @@ export const ipRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Per-address limiter: one active fusion per address
-// Checks both the DB and the chain to catch orphaned fusions
-export async function addressRateLimiter(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  const { address } = req.body;
-  if (!address) {
-    next();
-    return;
-  }
-
+/**
+ * Check if an address is available for a new fusion.
+ * Shared by both web (Express middleware) and Telegram bot.
+ */
+export async function checkAddressAvailability(
+  address: string,
+): Promise<{ allowed: boolean; reason?: string }> {
   // Check DB for active fusion
   const activeFusion = await Fusion.findOne({
     beneficiary: address,
@@ -36,10 +30,7 @@ export async function addressRateLimiter(
   });
 
   if (activeFusion) {
-    res.status(429).json({
-      error: 'This address already has an active plasma fusion.',
-    });
-    return;
+    return { allowed: false, reason: 'This address already has an active plasma fusion.' };
   }
 
   // Check DB for in-flight request (prevents double-submit race condition)
@@ -49,10 +40,7 @@ export async function addressRateLimiter(
   });
 
   if (pendingRequest) {
-    res.status(429).json({
-      error: 'A fusion request for this address is already being processed.',
-    });
-    return;
+    return { allowed: false, reason: 'A fusion request for this address is already being processed.' };
   }
 
   // Check on-chain fusion entries as a fallback (catches orphaned fusions
@@ -69,16 +57,33 @@ export async function addressRateLimiter(
     );
 
     if (hasChainFusion) {
-      // Sync the missing fusion into the DB so future checks are faster
       logger.warn('Found on-chain fusion not in DB, blocking duplicate', { address });
-      res.status(429).json({
-        error: 'This address already has an active plasma fusion.',
-      });
-      return;
+      return { allowed: false, reason: 'This address already has an active plasma fusion.' };
     }
   } catch (error) {
     // If chain check fails, still allow based on DB check (already passed above)
     logger.warn('Chain fusion check failed, relying on DB check only', { error, address });
+  }
+
+  return { allowed: true };
+}
+
+// Per-address limiter: one active fusion per address (Express middleware wrapper)
+export async function addressRateLimiter(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const { address } = req.body;
+  if (!address) {
+    next();
+    return;
+  }
+
+  const result = await checkAddressAvailability(address);
+  if (!result.allowed) {
+    res.status(429).json({ error: result.reason });
+    return;
   }
 
   next();

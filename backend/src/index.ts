@@ -8,6 +8,7 @@ import { initializeWallet } from './services/wallet.js';
 import { initializeZenon, clearZenonConnection } from './services/zenon.js';
 import { startBalanceMonitor, stopBalanceMonitor } from './cron/balanceMonitor.js';
 import { startReceiveMonitor, stopReceiveMonitor } from './cron/receiveMonitor.js';
+import { startTelegramBot, stopTelegramBot } from './telegram/index.js';
 import { logger } from './utils/logger.js';
 
 import fuseRoutes from './routes/fuse.js';
@@ -54,7 +55,10 @@ async function startup(): Promise<void> {
   startBalanceMonitor();
   startReceiveMonitor();
 
-  // 5. Start HTTP server
+  // 5. Start Telegram bot (optional — skips if no token)
+  await startTelegramBot();
+
+  // 6. Start HTTP server
   app.listen(CONFIG.PORT, () => {
     logger.info(`Plasma Bot API listening on port ${CONFIG.PORT}`);
   });
@@ -63,6 +67,7 @@ async function startup(): Promise<void> {
 async function shutdown(): Promise<void> {
   logger.info('Shutting down...');
 
+  stopTelegramBot();
   stopBalanceMonitor();
   stopReceiveMonitor();
   clearZenonConnection();
