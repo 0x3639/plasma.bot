@@ -5,6 +5,7 @@ const SENSITIVE_PATTERNS = [
   { regex: /(?:private[_-]?key|privateKey|secret|mnemonic|entropy|password|passphrase|admin[_-]?(?:api[_-]?)?key)\s*[:=]\s*["']?[^\s"',}{]+/gi, replacement: '[SENSITIVE_REDACTED]' },
   { regex: /KEYFILE_PASSWORD\s*[:=]\s*\S+/gi, replacement: 'KEYFILE_PASSWORD=[REDACTED]' },
   { regex: /ADMIN_API_KEY\s*[:=]\s*\S+/gi, replacement: 'ADMIN_API_KEY=[REDACTED]' },
+  { regex: /TELEGRAM_BOT_TOKEN\s*[:=]\s*\S+/gi, replacement: 'TELEGRAM_BOT_TOKEN=[REDACTED]' },
 ];
 
 export function sanitize(value: unknown): unknown {
@@ -28,7 +29,8 @@ export function sanitize(value: unknown): unknown {
       if (lowerKey.includes('password') || lowerKey.includes('mnemonic') ||
           lowerKey.includes('privatekey') || lowerKey.includes('secret') ||
           lowerKey.includes('entropy') || lowerKey.includes('captchatoken') ||
-          lowerKey.includes('apikey') || lowerKey.includes('api_key')) {
+          lowerKey.includes('apikey') || lowerKey.includes('api_key') ||
+          lowerKey.includes('telegram_bot_token') || lowerKey.includes('bottoken')) {
         sanitized[key] = '[REDACTED]';
       } else {
         sanitized[key] = sanitize(val);

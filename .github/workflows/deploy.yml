@@ -58,6 +58,7 @@ jobs:
             MONGODB_URI=${{ secrets.MONGODB_URI }}
             RATE_LIMIT_PER_IP_MAX=4
             BALANCE_THRESHOLD_QSR=500
+            TELEGRAM_RATE_LIMIT_PER_USER_MAX=4
             ENVEOF
             chmod 600 .env.production
 
@@ -67,6 +68,8 @@ jobs:
             echo "==> Exporting secrets as env vars..."
             export KEYFILE_PASSWORD='${{ secrets.KEYFILE_PASSWORD }}'
             export ADMIN_API_KEY='${{ secrets.ADMIN_API_KEY }}'
+            export TELEGRAM_BOT_TOKEN='${{ secrets.TELEGRAM_BOT_TOKEN }}'
+            export TELEGRAM_ALLOWED_CHAT_IDS='${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}'
 
             echo "==> Building Docker images..."
             docker compose build
@@ -84,6 +87,7 @@ jobs:
 
             echo "==> Running database migrations..."
             docker compose run --rm -T backend node backend/scripts/migrate-indexes.mjs
+            docker compose run --rm -T backend node backend/scripts/add-telegram-fields.mjs
 
             echo "==> Starting all services..."
             docker compose up -d

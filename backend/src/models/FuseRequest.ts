@@ -4,6 +4,8 @@ export interface IFuseRequest extends Document {
   beneficiary: string;
   tier: 'low' | 'medium' | 'high';
   ipAddress: string;
+  source: 'web' | 'telegram';
+  telegramUserId: number | null;
   fusion: Types.ObjectId | null;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'rate_limited';
   errorMessage: string | null;
@@ -27,6 +29,16 @@ const fuseRequestSchema = new Schema<IFuseRequest>({
     required: true,
     index: true,
   },
+  source: {
+    type: String,
+    required: true,
+    default: 'web',
+    enum: ['web', 'telegram'],
+  },
+  telegramUserId: {
+    type: Number,
+    default: null,
+  },
   fusion: {
     type: Schema.Types.ObjectId,
     ref: 'Fusion',
@@ -46,6 +58,7 @@ const fuseRequestSchema = new Schema<IFuseRequest>({
 
 fuseRequestSchema.index({ ipAddress: 1, createdAt: 1 });
 fuseRequestSchema.index({ beneficiary: 1, status: 1 });                       // address rate limiter
+fuseRequestSchema.index({ telegramUserId: 1, createdAt: 1 });                       // Telegram rate limiter
 fuseRequestSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 }); // TTL: 90 days
 
 export const FuseRequest = mongoose.model<IFuseRequest>('FuseRequest', fuseRequestSchema);

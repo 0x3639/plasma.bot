@@ -15,6 +15,13 @@ export const CONFIG = {
   // Admin
   ADMIN_API_KEY: process.env.ADMIN_API_KEY || '',
 
+  // Telegram Bot
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
+  TELEGRAM_RATE_LIMIT_PER_USER_MAX: parseInt(process.env.TELEGRAM_RATE_LIMIT_PER_USER_MAX || '4', 10),
+  TELEGRAM_ALLOWED_CHAT_IDS: process.env.TELEGRAM_ALLOWED_CHAT_IDS
+    ? process.env.TELEGRAM_ALLOWED_CHAT_IDS.split(',').map(Number)
+    : [] as number[],
+
   // MongoDB
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/plasma-bot',
 

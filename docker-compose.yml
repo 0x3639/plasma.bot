@@ -19,6 +19,8 @@ services:
     environment:
       - KEYFILE_PASSWORD=${KEYFILE_PASSWORD}
       - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ALLOWED_CHAT_IDS=${TELEGRAM_ALLOWED_CHAT_IDS}
     volumes:
       - /etc/plasma-bot/wallet.json:/etc/plasma-bot/wallet.json:ro
     depends_on:
