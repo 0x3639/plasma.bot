@@ -5,6 +5,7 @@ import { TierSelector } from '../components/TierSelector';
 import { FusionTable } from '../components/FusionTable';
 import { AlertBanner } from '../components/AlertBanner';
 import { DonationSection } from '../components/DonationSection';
+import { TelegramCard } from '../components/TelegramCard';
 import { useFuseRequest } from '../hooks/useFuseRequest';
 import { useStats } from '../hooks/useFusions';
 
@@ -135,6 +136,11 @@ export function Home() {
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-text-primary mb-4">Active Fusions</h2>
           <FusionTable />
+        </div>
+
+        {/* Telegram Bot */}
+        <div className="mb-8">
+          <TelegramCard />
         </div>
 
         {/* Footer / FAQ */}
