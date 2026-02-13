@@ -5,9 +5,10 @@ A self-hosted bot for the [Zenon Network](https://zenon.network) that fuses QSR 
 ## How It Works
 
 - Users submit their Zenon address and select a plasma tier (20, 80, or 120 QSR)
+- Requests can be made via the **web interface** or the **Telegram bot**
 - The bot fuses QSR from its wallet to the user's address, providing plasma
 - When the wallet balance drops below a configurable threshold, the bot automatically unfuses the oldest fusions (FIFO) to reclaim QSR
-- Rate limiting prevents abuse: 4 requests per IP per 24 hours, one active fusion per address
+- Rate limiting prevents abuse: 4 requests per IP per 24 hours (web) or per Telegram user per 24 hours, one active fusion per address
 
 ## Architecture
 
@@ -28,6 +29,7 @@ A self-hosted bot for the [Zenon Network](https://zenon.network) that fuses QSR 
 
 - **Backend**: Node.js + Express + TypeScript. Manages wallet, fusing/unfusing, balance monitoring.
 - **Frontend**: React + Vite + Tailwind CSS. Single-page app with stats, fuse form, and fusion table.
+- **Telegram Bot**: Telegraf-based bot for fusing plasma via Telegram commands. Works in DMs and allowed group chats.
 - **Database**: MongoDB for fusion records and request auditing.
 - **Reverse Proxy**: Caddy with automatic HTTPS via Let's Encrypt.
 
@@ -86,6 +88,9 @@ For **local development**, copy `.env.example` to `backend/.env` and fill in the
 | `ADMIN_API_KEY` | API key for admin endpoints | (disabled if empty) |
 | `RATE_LIMIT_PER_IP_MAX` | Max fuse requests per IP per 24h | `4` |
 | `BALANCE_THRESHOLD_QSR` | QSR balance that triggers unfusing | `500` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather | (disabled if empty) |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Comma-separated Telegram group IDs allowed to use the bot | (DMs only if empty) |
+| `TELEGRAM_RATE_LIMIT_PER_USER_MAX` | Max fuse requests per Telegram user per 24h | `4` |
 
 ## API Endpoints
 
@@ -98,6 +103,27 @@ For **local development**, copy `.env.example` to `backend/.env` and fill in the
 | `GET` | `/api/health` | Bot health status |
 | `POST` | `/api/admin/receive` | Force receive pending transactions (requires `X-Admin-Key`) |
 | `POST` | `/api/admin/cycle` | Force balance monitor cycle (requires `X-Admin-Key`) |
+
+## Telegram Bot
+
+The bot can also be used via Telegram. Set `TELEGRAM_BOT_TOKEN` to enable it. It uses long-polling (no webhook needed).
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/fuse` | Show help and list of commands |
+| `/fuse 20 z1...` | Fuse 20 QSR (low tier) |
+| `/fuse 80 z1...` | Fuse 80 QSR (medium tier) |
+| `/fuse 120 z1...` | Fuse 120 QSR (high tier) |
+| `/fuse health` | Bot status (uptime, balance, active fusions) |
+| `/fuse status` | List active fusions (latest 10) |
+| `/fuse status z1...` | Fusions for a specific address |
+
+### Chat Access
+
+- **DMs**: Always allowed
+- **Groups**: Only groups whose chat ID is listed in `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated). To find a group's chat ID, add the bot to the group and check the logs, or use a bot like @userinfobot.
 
 ## Deployment
 
@@ -126,6 +152,8 @@ Configure these in your repo under Settings > Secrets > Actions. The deploy work
 | `MONGODB_URI` | `mongodb://mongodb:27017/plasma-bot` |
 | `ZNN_NODE_URL` | `wss://node.zenonhub.io:35998` |
 | `FRONTEND_URL` | `https://yourdomain.com` |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Comma-separated allowed group chat IDs |
 
 ### CI/CD Pipeline
 
