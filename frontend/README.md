@@ -1,6 +1,6 @@
 # Plasma Bot — Frontend
 
-Single-page React app for the [Zenon Network Plasma Bot](https://plasmabot.zenon.info). Users request temporary plasma by selecting a tier and entering their Zenon address.
+Single-page React app for the [Zenon Network Plasma Bot](https://plazma.bot). Users request temporary plasma by selecting a tier and entering their Zenon address.
 
 ## Tech Stack
 

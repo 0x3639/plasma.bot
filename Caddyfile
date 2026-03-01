@@ -1,4 +1,4 @@
-plasmabot.zenon.info {
+plazma.bot {
 	# API reverse proxy
 	handle /api/* {
 		reverse_proxy backend:3001 {
