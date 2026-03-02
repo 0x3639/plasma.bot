@@ -19,6 +19,6 @@ export function setupSecurity(app: Express): void {
 
   app.use(express.json({ limit: '1kb' }));
 
-  // Trust first proxy (nginx) for correct IP detection
-  app.set('trust proxy', 1);
+  // Trust proxy chain (Cloudflare → Caddy → Express)
+  app.set('trust proxy', 2);
 }

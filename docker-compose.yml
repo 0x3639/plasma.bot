@@ -38,6 +38,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./frontend-dist:/srv/frontend:ro
+      - /etc/plasma-bot/caddy-certs:/etc/caddy/certs:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:

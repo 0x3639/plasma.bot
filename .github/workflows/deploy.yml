@@ -71,6 +71,9 @@ jobs:
             export TELEGRAM_BOT_TOKEN='${{ secrets.TELEGRAM_BOT_TOKEN }}'
             export TELEGRAM_ALLOWED_CHAT_IDS='${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}'
 
+            echo "==> Ensuring cert directory exists..."
+            sudo mkdir -p /etc/plasma-bot/caddy-certs
+
             echo "==> Building Docker images..."
             docker compose build
 
@@ -95,8 +98,8 @@ jobs:
             echo "==> Checking if Caddy config changed..."
             NEW_CADDY_HASH=$(md5sum Caddyfile | cut -d' ' -f1)
             if [ "$OLD_CADDY_HASH" != "$NEW_CADDY_HASH" ]; then
-              echo "==> Caddyfile changed, reloading Caddy..."
-              docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+              echo "==> Caddyfile changed, restarting Caddy..."
+              docker compose restart caddy
             fi
 
             echo "==> Waiting for backend to start..."
