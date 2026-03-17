@@ -12,6 +12,7 @@ build/
 .env
 .env.local
 .env.production
+.env.secrets
 
 # Wallet files — NEVER commit
 *.keyfile
@@ -42,9 +43,6 @@ npm-debug.log*
 
 # Test coverage
 coverage/
-
-# Security audit plan (local only)
-SECURITY-AUDIT.md
 
 # Database dumps
 mongo-dump/

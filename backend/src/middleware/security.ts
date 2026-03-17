@@ -19,6 +19,7 @@ export function setupSecurity(app: Express): void {
 
   app.use(express.json({ limit: '1kb' }));
 
-  // Trust proxy chain (Cloudflare → Caddy → Express)
-  app.set('trust proxy', 2);
+  // Trust proxy: Caddy overwrites X-Forwarded-For with CF-Connecting-IP,
+  // so there's exactly 1 trusted hop (Caddy) between Cloudflare and Express.
+  app.set('trust proxy', 1);
 }

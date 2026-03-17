@@ -62,14 +62,14 @@ jobs:
             ENVEOF
             chmod 600 .env.production
 
-            echo "==> Removing secrets.env if it exists..."
-            rm -f /etc/plasma-bot/secrets.env
-
-            echo "==> Exporting secrets as env vars..."
-            export KEYFILE_PASSWORD='${{ secrets.KEYFILE_PASSWORD }}'
-            export ADMIN_API_KEY='${{ secrets.ADMIN_API_KEY }}'
-            export TELEGRAM_BOT_TOKEN='${{ secrets.TELEGRAM_BOT_TOKEN }}'
-            export TELEGRAM_ALLOWED_CHAT_IDS='${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}'
+            echo "==> Writing secrets file..."
+            cat > .env.secrets << SECRETSEOF
+            KEYFILE_PASSWORD=${{ secrets.KEYFILE_PASSWORD }}
+            ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            TELEGRAM_ALLOWED_CHAT_IDS=${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}
+            SECRETSEOF
+            chmod 600 .env.secrets
 
             echo "==> Ensuring cert directory exists..."
             sudo mkdir -p /etc/plasma-bot/caddy-certs

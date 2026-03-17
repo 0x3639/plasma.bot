@@ -68,16 +68,13 @@ describe('fuseRequestSchema', () => {
     }
   });
 
-  it('strips extra fields', () => {
+  it('rejects extra fields', () => {
     const result = fuseRequestSchema.safeParse({
       address: 'z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0',
       tier: 'low',
-      extraField: 'should be removed',
+      extraField: 'should be rejected',
     });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).not.toHaveProperty('extraField');
-    }
+    expect(result.success).toBe(false);
   });
 
   it('rejects numeric tier', () => {

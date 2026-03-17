@@ -59,8 +59,24 @@ async function agentAddressRateLimiter(
   next();
 }
 
+function requireJson(req: Request, res: Response, next: NextFunction): void {
+  const contentType = req.headers['content-type'];
+  if (!contentType || !contentType.includes('application/json')) {
+    res.status(415).json({
+      success: false,
+      error: {
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+        message: 'Content-Type must be application/json',
+      },
+    });
+    return;
+  }
+  next();
+}
+
 router.post(
   '/',
+  requireJson,
   agentIpRateLimiter,
   agentValidateBody(fuseRequestSchema),
   agentAddressRateLimiter,

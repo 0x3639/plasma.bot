@@ -14,7 +14,7 @@ export const fuseRequestSchema = z.object({
   tier: z.enum(['low', 'medium', 'high'], {
     errorMap: () => ({ message: 'Tier must be low, medium, or high' }),
   }),
-});
+}).strict();
 
 export type FuseRequestBody = z.infer<typeof fuseRequestSchema>;
 
