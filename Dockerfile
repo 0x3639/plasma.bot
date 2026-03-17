@@ -57,6 +57,9 @@ RUN npm ci --workspace=backend --omit=dev
 # Copy compiled backend from build stage
 COPY --from=build-backend /app/backend/dist/ backend/dist/
 
+# Copy non-compiled backend assets (JSON spec loaded at runtime)
+COPY backend/src/openapi.json backend/src/openapi.json
+
 # Copy migration scripts (plain JS, no build step needed)
 COPY backend/scripts/*.mjs backend/scripts/
 
