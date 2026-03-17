@@ -68,6 +68,22 @@ export async function checkAddressAvailability(
   return { allowed: true };
 }
 
+// Agent IP-based rate limiter: separate counter, higher default (10/day)
+export const agentIpRateLimiter = rateLimit({
+  windowMs: CONFIG.RATE_LIMIT_PER_IP_WINDOW_MS,
+  max: CONFIG.AGENT_RATE_LIMIT_PER_IP_MAX,
+  keyGenerator: (req) => `agent:${req.ip}`,
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMITED',
+      message: `Too many agent fuse requests from this IP. Maximum ${CONFIG.AGENT_RATE_LIMIT_PER_IP_MAX} per 24 hours.`,
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Per-address limiter: one active fusion per address (Express middleware wrapper)
 export async function addressRateLimiter(
   req: Request,

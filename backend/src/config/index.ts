@@ -38,6 +38,7 @@ export const CONFIG = {
   // Rate limiting
   RATE_LIMIT_PER_IP_WINDOW_MS: 24 * 60 * 60 * 1000, // 24 hours
   RATE_LIMIT_PER_IP_MAX: parseInt(process.env.RATE_LIMIT_PER_IP_MAX || '4', 10),
+  AGENT_RATE_LIMIT_PER_IP_MAX: parseInt(process.env.AGENT_RATE_LIMIT_PER_IP_MAX || '10', 10),
 
   // Cron intervals
   BALANCE_CHECK_INTERVAL_MS: 5 * 60 * 1000,  // 5 minutes

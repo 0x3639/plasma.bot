@@ -4,7 +4,7 @@ export interface IFuseRequest extends Document {
   beneficiary: string;
   tier: 'low' | 'medium' | 'high';
   ipAddress: string;
-  source: 'web' | 'telegram';
+  source: 'web' | 'telegram' | 'api';
   telegramUserId: number | null;
   fusion: Types.ObjectId | null;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'rate_limited';
@@ -33,7 +33,7 @@ const fuseRequestSchema = new Schema<IFuseRequest>({
     type: String,
     required: true,
     default: 'web',
-    enum: ['web', 'telegram'],
+    enum: ['web', 'telegram', 'api'],
   },
   telegramUserId: {
     type: Number,

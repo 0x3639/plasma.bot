@@ -1,0 +1,329 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Plasma Bot API",
+    "description": "Agent-friendly API for requesting temporary QSR plasma fusions on the Zenon Network. Agents can programmatically fuse plasma to any Zenon address.",
+    "version": "1.0.0",
+    "contact": {
+      "url": "https://plazma.bot"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://plazma.bot",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/api/agent/fuse": {
+      "post": {
+        "operationId": "agentFuse",
+        "summary": "Request a plasma fusion",
+        "description": "Fuse QSR plasma to a Zenon address. Rate limited to 10 requests per IP per 24 hours. Each address can only have one active fusion at a time.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FuseRequest"
+              },
+              "example": {
+                "address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
+                "tier": "low"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fusion successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FuseSuccess"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (IP quota exceeded or address has active fusion)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/RateLimitedError" },
+                    { "$ref": "#/components/schemas/AddressUnavailableError" }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Insufficient QSR balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsufficientBalanceError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Fusion transaction failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FuseFailedError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "operationId": "getStats",
+        "summary": "Get wallet stats",
+        "description": "Returns the bot's current QSR balance, active fusion count, and available tiers.",
+        "responses": {
+          "200": {
+            "description": "Current stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fusions/{address}": {
+      "get": {
+        "operationId": "getFusionsByAddress",
+        "summary": "Get fusions for an address",
+        "description": "Returns paginated fusion history for a specific Zenon address.",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Zenon address (starts with z1, 40 characters)"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1, "minimum": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 100 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fusion history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FusionList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Health check",
+        "description": "Returns bot health status, uptime, and basic metrics.",
+        "responses": {
+          "200": {
+            "description": "Healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unhealthy"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "FuseRequest": {
+        "type": "object",
+        "required": ["address", "tier"],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Zenon address to fuse plasma to (starts with z1, 40 characters)",
+            "example": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz"
+          },
+          "tier": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Fusion tier: low (20 QSR), medium (80 QSR), high (120 QSR)"
+          }
+        }
+      },
+      "FuseSuccess": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [true] },
+          "txHash": { "type": "string", "description": "On-chain transaction hash" },
+          "address": { "type": "string" },
+          "tier": { "type": "string", "enum": ["low", "medium", "high"] },
+          "amount": { "type": "number", "description": "QSR amount fused" }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["VALIDATION_FAILED"] },
+              "message": { "type": "string" },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": { "type": "string" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimitedError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["RATE_LIMITED"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "AddressUnavailableError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["ADDRESS_UNAVAILABLE"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "InsufficientBalanceError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["INSUFFICIENT_BALANCE"] },
+              "message": { "type": "string" },
+              "available": { "type": "number" },
+              "needed": { "type": "number" },
+              "nextUnfuseAt": { "type": "string", "nullable": true, "format": "date-time" }
+            }
+          }
+        }
+      },
+      "FuseFailedError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["FUSE_FAILED"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "walletAddress": { "type": "string" },
+          "qsrAvailable": { "type": "number" },
+          "qsrFused": { "type": "number" },
+          "activeFusionCount": { "type": "integer" },
+          "availableTiers": { "type": "array", "items": { "type": "string" } },
+          "nextUnfuseAt": { "type": "string", "nullable": true, "format": "date-time" },
+          "currentHeight": { "type": "integer" }
+        }
+      },
+      "FusionList": {
+        "type": "object",
+        "properties": {
+          "address": { "type": "string" },
+          "fusions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fusionId": { "type": "string", "nullable": true },
+                "tier": { "type": "string" },
+                "qsrAmount": { "type": "number" },
+                "txHash": { "type": "string" },
+                "fusedAt": { "type": "string", "format": "date-time" },
+                "unfusedAt": { "type": "string", "nullable": true, "format": "date-time" },
+                "status": { "type": "string" }
+              }
+            }
+          },
+          "count": { "type": "integer" },
+          "total": { "type": "integer" },
+          "page": { "type": "integer" },
+          "totalPages": { "type": "integer" }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "error"] },
+          "uptime": { "type": "integer", "description": "Uptime in seconds" },
+          "walletAddress": { "type": "string" },
+          "qsrBalance": { "type": "number" },
+          "activeFusionCount": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

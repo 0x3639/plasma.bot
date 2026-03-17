@@ -17,6 +17,8 @@ import statsRoutes from './routes/stats.js';
 import healthRoutes from './routes/health.js';
 import adminRoutes from './routes/admin.js';
 import donationRoutes from './routes/donations.js';
+import agentFuseRoutes from './routes/agentFuse.js';
+import openapiRoutes from './routes/openapi.js';
 
 const app = express();
 
@@ -35,6 +37,8 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/donations', donationRoutes);
+app.use('/api/agent/fuse', agentFuseRoutes);
+app.use('/api/openapi.json', openapiRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

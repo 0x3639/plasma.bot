@@ -1,0 +1,59 @@
+# Plasma Bot
+
+> Temporary QSR plasma fusing service for the Zenon Network
+
+Plasma Bot lets any Zenon address receive temporary plasma by fusing QSR from a shared wallet. Plasma is the fee/gas mechanism on Zenon — fusing QSR to an address grants it plasma for sending transactions without burning tokens. Fusions are temporary and automatically reclaimed after ~21 hours.
+
+## API
+
+Base URL: https://plazma.bot
+
+### Request a fusion
+
+POST /api/agent/fuse
+Content-Type: application/json
+
+Request body:
+{
+  "address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
+  "tier": "low"
+}
+
+Tiers: low (20 QSR), medium (80 QSR), high (120 QSR)
+
+Success response (200):
+{
+  "success": true,
+  "txHash": "abc123...",
+  "address": "z1q...",
+  "tier": "low",
+  "amount": 20
+}
+
+Error codes: VALIDATION_FAILED (400), RATE_LIMITED (429), ADDRESS_UNAVAILABLE (429), INSUFFICIENT_BALANCE (503), FUSE_FAILED (500)
+
+### Check availability
+
+GET /api/stats
+
+Returns wallet balance, available tiers, and active fusion count.
+
+### Check fusion status
+
+GET /api/fusions/{address}
+
+Returns fusion history for a specific address.
+
+### Health check
+
+GET /api/health
+
+## Constraints
+
+- Rate limit: 10 requests per IP per 24 hours
+- One active fusion per address at a time
+- Fusions are temporary (~21 hours) and automatically reclaimed
+
+## Machine-readable spec
+
+OpenAPI 3.0: https://plazma.bot/api/openapi.json
