@@ -5,10 +5,10 @@ A self-hosted bot for the [Zenon Network](https://zenon.network) that fuses QSR 
 ## How It Works
 
 - Users submit their Zenon address and select a plasma tier (20, 80, or 120 QSR)
-- Requests can be made via the **web interface** or the **Telegram bot**
+- Requests can be made via the **web interface**, the **Telegram bot**, or the **agent API**
 - The bot fuses QSR from its wallet to the user's address, providing plasma
 - When the wallet balance drops below a configurable threshold, the bot automatically unfuses the oldest fusions (FIFO) to reclaim QSR
-- Rate limiting prevents abuse: 4 requests per IP per 24 hours (web) or per Telegram user per 24 hours, one active fusion per address
+- Rate limiting prevents abuse: 4 requests per IP per 24 hours (web), per Telegram user per 24 hours, or 10 per IP per 24 hours (agent API), one active fusion per address
 
 ## Architecture
 
@@ -91,6 +91,7 @@ For **local development**, copy `.env.example` to `backend/.env` and fill in the
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather | (disabled if empty) |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Comma-separated Telegram group IDs allowed to use the bot | (DMs only if empty) |
 | `TELEGRAM_RATE_LIMIT_PER_USER_MAX` | Max fuse requests per Telegram user per 24h | `4` |
+| `AGENT_RATE_LIMIT_PER_IP_MAX` | Max agent API fuse requests per IP per 24h | `10` |
 
 ## API Endpoints
 
@@ -101,8 +102,34 @@ For **local development**, copy `.env.example` to `backend/.env` and fill in the
 | `GET` | `/api/fusions/:address` | Fusions for a specific address |
 | `GET` | `/api/stats` | Public stats (balance, fused QSR, tiers) |
 | `GET` | `/api/health` | Bot health status |
+| `POST` | `/api/agent/fuse` | Agent API: request a plasma fusion (machine-readable responses) |
+| `GET` | `/api/openapi.json` | OpenAPI 3.0 specification |
 | `POST` | `/api/admin/receive` | Force receive pending transactions (requires `X-Admin-Key`) |
 | `POST` | `/api/admin/cycle` | Force balance monitor cycle (requires `X-Admin-Key`) |
+
+## Agent API
+
+A dedicated API for bots, scripts, and AI agents to request plasma programmatically. Returns structured, machine-readable responses with typed error codes.
+
+```bash
+# Discover the API
+curl https://plazma.bot/llms.txt
+curl https://plazma.bot/api/openapi.json
+
+# Request a fusion
+curl -X POST https://plazma.bot/api/agent/fuse \
+  -H "Content-Type: application/json" \
+  -d '{"address": "z1q...", "tier": "low"}'
+```
+
+**Success response** (200):
+```json
+{"success": true, "txHash": "...", "address": "z1q...", "tier": "low", "amount": 20}
+```
+
+**Error codes**: `VALIDATION_FAILED` (400), `RATE_LIMITED` (429), `ADDRESS_UNAVAILABLE` (429), `INSUFFICIENT_BALANCE` (503), `FUSE_FAILED` (500). All errors include `success: false` and a structured `error` object with `code` and `message`.
+
+Rate limited separately from web traffic (default 10 requests per IP per 24 hours). See [ROADMAP.md](ROADMAP.md) for planned enhancements including 402 agentic payments and MCP server integration.
 
 ## Telegram Bot
 
