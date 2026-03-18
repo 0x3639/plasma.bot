@@ -84,7 +84,7 @@ export function DonationSection() {
                     rel="noopener noreferrer"
                     className="font-mono text-xs text-text-primary hover:text-green-primary hover:underline transition-colors"
                   >
-                    <span className="sm:hidden">{truncateAddress(donor.address, 5, 5)}</span>
+                    <span className="sm:hidden">{truncateAddress(donor.address, 6, 6)}</span>
                     <span className="hidden sm:inline">{truncateAddress(donor.address, 8, 6)}</span>
                   </a>
                   <span className="font-mono text-xs text-text-primary ml-3">

@@ -173,7 +173,15 @@ export function Home() {
         <DonationSection />
 
         <p className="text-center text-text-muted text-xs mt-8">
-          Powered by the Network of Momentum
+          Powered by the{' '}
+          <a
+            href="https://zenon.network"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-green-primary hover:underline transition-colors"
+          >
+            Zenon Network
+          </a>
         </p>
       </div>
     </main>

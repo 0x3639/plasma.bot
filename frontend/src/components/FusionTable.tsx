@@ -89,7 +89,7 @@ export function FusionTable() {
                     rel="noopener noreferrer"
                     className="hover:text-green-primary hover:underline transition-colors"
                   >
-                    <span className="sm:hidden">{truncateAddress(fusion.beneficiary, 3, 5)}</span>
+                    <span className="sm:hidden">{truncateAddress(fusion.beneficiary, 6, 6)}</span>
                     <span className="hidden sm:inline">{truncateAddress(fusion.beneficiary, 6, 6)}</span>
                   </a>
                 </td>

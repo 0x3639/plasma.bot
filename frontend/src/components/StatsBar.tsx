@@ -32,7 +32,8 @@ export function StatsBar() {
               rel="noopener noreferrer"
               className="font-mono text-sm text-green-primary flex-1 hover:underline"
             >
-              {data?.walletAddress ? truncateAddress(data.walletAddress) : ''}
+              <span className="sm:hidden">{data?.walletAddress ? truncateAddress(data.walletAddress, 6, 6) : ''}</span>
+              <span className="hidden sm:inline">{data?.walletAddress ?? ''}</span>
             </a>
           )}
           <button
