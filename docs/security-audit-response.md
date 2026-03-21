@@ -30,6 +30,31 @@ Penetration test report: `docs/report_flow_1_website_penetration_test_2026032111
 | TLS 1.0/1.1 enabled | Medium | Set Minimum TLS Version to 1.2 in Cloudflare dashboard: SSL/TLS > Edge Certificates > Minimum TLS Version. |
 | OCSP Stapling not enabled | Low | Verify OCSP stapling is enabled in Cloudflare SSL/TLS settings. |
 
+#### Cloudflare Changes Step-by-Step
+
+1. **Disable TLS 1.0/1.1** — The audit found TLS 1.0 and 1.1 still accepted at the Cloudflare edge, which exposes visitors to BEAST and other downgrade attacks.
+   - Go to **SSL/TLS > Edge Certificates > Minimum TLS Version**
+   - Change from `TLS 1.0` to **`TLS 1.2`**
+
+2. **Enable HSTS at Cloudflare** (belt-and-suspenders with Caddyfile) — Ensures HSTS is applied even if a request somehow bypasses Caddy.
+   - Go to **SSL/TLS > Edge Certificates > HTTP Strict Transport Security (HSTS)**
+   - Enable HSTS, set Max-Age to **12 months (31536000)**
+   - Enable **Include subdomains**
+   - Enable **Preload**
+   - Enable **No-Sniff** header
+
+3. **Verify OCSP Stapling** — Cloudflare enables this by default for proxied domains, but confirm it's active.
+   - No dashboard toggle; this is automatic for orange-clouded (proxied) records
+   - Verify with: `openssl s_client -connect plazma.bot:443 -status < /dev/null 2>&1 | grep -i "OCSP Response Status"`
+
+4. **Set SSL/TLS encryption mode to Full (Strict)** — Ensures Cloudflare validates the origin certificate from Caddy.
+   - Go to **SSL/TLS > Overview**
+   - Set encryption mode to **Full (strict)**
+
+5. **Enable Always Use HTTPS** — Redirects all HTTP requests to HTTPS at the Cloudflare edge.
+   - Go to **SSL/TLS > Edge Certificates > Always Use HTTPS**
+   - Toggle **On**
+
 ## Verification Checklist
 
 After deployment, confirm with `curl -I https://plazma.bot`:
