@@ -12,6 +12,21 @@ export function setupSecurity(app: Express): void {
     frameguard: { action: 'deny' },
   }));
 
+  // Agent API is public/machine-readable: allow any origin (POST only).
+  // Registered BEFORE the global FRONTEND_URL-locked CORS so it takes precedence.
+  app.use('/api/agent', cors({
+    origin: '*',
+    methods: ['POST'],
+    allowedHeaders: ['Content-Type'],
+  }));
+
+  // Public read-only stats endpoint: allow any origin (GET only).
+  app.use('/api/stats', cors({
+    origin: '*',
+    methods: ['GET'],
+    allowedHeaders: ['Content-Type'],
+  }));
+
   app.use(cors({
     origin: CONFIG.FRONTEND_URL,
     methods: ['GET', 'POST'],
