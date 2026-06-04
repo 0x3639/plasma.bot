@@ -78,6 +78,7 @@ import statusRoutes from '../../routes/status.js';
 import statsRoutes, { resetStatsCache } from '../../routes/stats.js';
 import healthRoutes from '../../routes/health.js';
 import adminRoutes from '../../routes/admin.js';
+import { CONFIG } from '../../config/index.js';
 
 function createApp() {
   const app = express();
@@ -228,6 +229,38 @@ describe('Route Integration Tests', () => {
       expect(res.headers['x-frame-options']).toBe('DENY');
       expect(res.headers).toHaveProperty('x-content-type-options');
       expect(res.headers).toHaveProperty('strict-transport-security');
+    });
+  });
+
+  // --- CORS policy ---
+  // Regression guard: the public, machine-readable endpoints (agent fuse + stats)
+  // must return a permissive Access-Control-Allow-Origin on the ACTUAL response
+  // (not only the preflight), while every other endpoint stays locked to
+  // FRONTEND_URL. A prior implementation stacked a scoped cors() before the global
+  // lock, which let the global cors() overwrite ACAO back to FRONTEND_URL on the
+  // real request — breaking cross-origin clients while the preflight looked fine.
+  describe('CORS policy', () => {
+    const FOREIGN_ORIGIN = 'https://example.com';
+
+    it('allows any origin on the public stats endpoint (actual request)', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/stats').set('Origin', FOREIGN_ORIGIN);
+      expect(res.headers['access-control-allow-origin']).toBe('*');
+    });
+
+    it('allows any origin on the public stats endpoint (preflight)', async () => {
+      const app = createApp();
+      const res = await request(app)
+        .options('/api/stats')
+        .set('Origin', FOREIGN_ORIGIN)
+        .set('Access-Control-Request-Method', 'GET');
+      expect(res.headers['access-control-allow-origin']).toBe('*');
+    });
+
+    it('keeps non-public endpoints locked to FRONTEND_URL', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/fusions').set('Origin', FOREIGN_ORIGIN);
+      expect(res.headers['access-control-allow-origin']).toBe(CONFIG.FRONTEND_URL);
     });
   });
 
