@@ -63,7 +63,7 @@ jobs:
             chmod 600 .env.production
 
             echo "==> Writing secrets file..."
-            cat > .env.secrets << SECRETSEOF
+            cat > .env.secrets << 'SECRETSEOF'
             KEYFILE_PASSWORD=${{ secrets.KEYFILE_PASSWORD }}
             ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}

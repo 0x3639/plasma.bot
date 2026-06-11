@@ -2,8 +2,23 @@ import { CONFIG } from '../config/index.js';
 
 const ZENONHUB_BASE = 'https://zenonhub.io/explorer/account';
 
+/**
+ * Escape text for Telegram HTML parse mode. Replies use parse_mode: 'HTML'
+ * and interpolate dynamic values into tags; escaping every dynamic value makes
+ * those replies safe by construction rather than relying on each caller having
+ * pre-validated its input (which is fragile against future code paths).
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function addressLink(address: string): string {
-  return `<a href="${ZENONHUB_BASE}/${address}">${address.slice(0, 8)}...${address.slice(-6)}</a>`;
+  const safe = escapeHtml(address);
+  return `<a href="${ZENONHUB_BASE}/${safe}">${escapeHtml(address.slice(0, 8))}...${escapeHtml(address.slice(-6))}</a>`;
 }
 
 export function formatHelp(): string {
@@ -32,8 +47,8 @@ export function formatFuseSuccess(
     '<b>Plasma Fused</b>',
     '',
     `Address: ${addressLink(address)}`,
-    `Amount: <b>${amount} QSR</b> (${tier})`,
-    `TX: <code>${txHash}</code>`,
+    `Amount: <b>${amount} QSR</b> (${escapeHtml(tier)})`,
+    `TX: <code>${escapeHtml(txHash)}</code>`,
   ].join('\n');
 }
 
@@ -82,7 +97,7 @@ export function formatFusionList(
   const lines = fusions.map((f) => {
     const qsr = f.qsrAmount / Math.pow(10, CONFIG.QSR_DECIMALS);
     const ago = timeAgo(f.fusedAt);
-    return `${addressLink(f.beneficiary)} — ${qsr} QSR (${f.tier}) — ${ago}`;
+    return `${addressLink(f.beneficiary)} — ${qsr} QSR (${escapeHtml(f.tier)}) — ${ago}`;
   });
 
   const parts = [header, '', ...lines];
@@ -95,7 +110,7 @@ export function formatFusionList(
 }
 
 export function formatError(message: string): string {
-  return `<b>Error:</b> ${message}`;
+  return `<b>Error:</b> ${escapeHtml(message)}`;
 }
 
 export function formatRateLimited(remaining: number, maxPerDay: number): string {

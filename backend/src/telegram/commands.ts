@@ -2,10 +2,10 @@ import type { Context } from 'telegraf';
 import { Address } from 'znn-typescript-sdk';
 import { CONFIG, type FuseTier } from '../config/index.js';
 import { fuseToAddress } from '../services/plasma.js';
-import { getQsrBalance, tryReserveQsr, releaseQsr } from '../services/balance.js';
+import { getQsrBalance, tryReserveQsr, scheduleReleaseQsr } from '../services/balance.js';
 import { getNextUnfuseTime } from '../services/unfuse.js';
 import { getWalletAddress } from '../services/wallet.js';
-import { checkAddressAvailability } from '../middleware/rateLimiter.js';
+import { checkAddressAvailability, isGlobalDailyCapReached, confirmGlobalCapSlot } from '../middleware/rateLimiter.js';
 import { checkTelegramUserRateLimit } from './rateLimiter.js';
 import { Fusion } from '../models/Fusion.js';
 import { FuseRequest } from '../models/FuseRequest.js';
@@ -147,6 +147,20 @@ async function handleFuse(
     return;
   }
 
+  // Check the Telegram-wide daily cap. Telegram accounts are cheap, so the
+  // per-user limit alone does not bound total dispensation from this source.
+  try {
+    if (await isGlobalDailyCapReached('telegram')) {
+      await reply(ctx, formatError('The fuse service has reached its daily limit. Please try again later.'));
+      return;
+    }
+  } catch (error) {
+    // Fail safe: if we can't verify the cap, do not dispense funds.
+    logger.error('Telegram global daily cap check failed', { error });
+    await reply(ctx, formatError('Service temporarily unavailable. Please try again later.'));
+    return;
+  }
+
   // Check per-address availability
   const addressCheck = await checkAddressAvailability(addressStr);
   if (!addressCheck.allowed) {
@@ -154,17 +168,51 @@ async function handleFuse(
     return;
   }
 
-  // Create audit record
-  const fuseRequest = await FuseRequest.create({
-    beneficiary: addressStr,
-    tier,
-    ipAddress: 'telegram',
-    source: 'telegram',
-    telegramUserId,
-    status: 'processing',
-  });
+  // Create audit record. Also the race lock (unique partial index on
+  // FuseRequest{beneficiary, status:'processing'}): a concurrent request for
+  // the same address fails here instead of double-fusing.
+  let fuseRequest;
+  try {
+    fuseRequest = await FuseRequest.create({
+      beneficiary: addressStr,
+      tier,
+      ipAddress: 'telegram',
+      source: 'telegram',
+      telegramUserId,
+      status: 'processing',
+    });
+  } catch (error) {
+    if (error instanceof Error && (error as { code?: number }).code === 11000) {
+      await reply(ctx, formatError('A fusion request for this address is already being processed.'));
+      return;
+    }
+    logger.error('Failed to create telegram fuse request record', { error, address: addressStr });
+    await reply(ctx, formatError('Service temporarily unavailable. Please try again later.'));
+    return;
+  }
 
-  const balance = await getQsrBalance();
+  // From here on, every exit path must move the record off 'processing' — a
+  // stuck 'processing' record blocks this address (unique partial index +
+  // availability check) and occupies a global-cap slot until the stale-request
+  // sweeper clears it.
+  let balance: number;
+  try {
+    // Atomic re-check of the global cap now that our 'processing' record
+    // exists; the pre-check above is racy under a concurrent burst.
+    if (!(await confirmGlobalCapSlot(fuseRequest))) {
+      await reply(ctx, formatError('The fuse service has reached its daily limit. Please try again later.'));
+      return;
+    }
+
+    balance = await getQsrBalance();
+  } catch (error) {
+    logger.error('Telegram fuse pre-checks failed', { error, address: addressStr });
+    fuseRequest.status = 'failed';
+    fuseRequest.errorMessage = 'Pre-check failed (node or DB unavailable)';
+    await fuseRequest.save().catch(() => undefined); // sweeper cleans up if this also fails
+    await reply(ctx, formatError('Service temporarily unavailable. Please try again later.'));
+    return;
+  }
 
   // Atomic check + reserve
   if (!tryReserveQsr(amount, balance)) {
@@ -172,8 +220,10 @@ async function handleFuse(
     fuseRequest.errorMessage = 'Insufficient QSR balance for this tier';
     await fuseRequest.save();
 
+    // Best-effort: the record is already 'failed', so a node error here must
+    // not abort the reply.
     const available = Math.max(0, balance);
-    const nextUnfuse = await getNextUnfuseTime();
+    const nextUnfuse = await getNextUnfuseTime().catch(() => null);
     let error = `Not enough QSR available for the ${tier} tier (${amount} QSR needed, ${available} available).`;
 
     if (available >= 20 && amount > 20) {
@@ -196,6 +246,9 @@ async function handleFuse(
     fuseRequest.fusion = fusion._id;
     await fuseRequest.save();
 
+    // Hold the reservation across the chain-confirmation window, then release.
+    scheduleReleaseQsr(amount);
+
     logger.info('Telegram fuse completed', {
       telegramUserId,
       address: addressStr,
@@ -209,10 +262,13 @@ async function handleFuse(
 
     fuseRequest.status = 'failed';
     fuseRequest.errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    await fuseRequest.save();
+    await fuseRequest.save().catch(() => undefined);
+
+    // A send "failure" can be a timeout on a block that still lands in a
+    // momentum seconds later, so hold the reservation across the confirmation
+    // window instead of releasing it against a stale balance.
+    scheduleReleaseQsr(amount);
 
     await reply(ctx, formatError('Failed to fuse plasma. Please try again later.'));
-  } finally {
-    releaseQsr(amount);
   }
 }

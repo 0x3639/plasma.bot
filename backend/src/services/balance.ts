@@ -18,6 +18,23 @@ export function releaseQsr(amount: number): void {
   reservedQsr = Math.max(0, reservedQsr - amount);
 }
 
+/**
+ * Release a reservation only after the chain has had time to reflect the spend.
+ *
+ * `zenon.send()` resolving means the fuse block was published, NOT that the
+ * wallet's on-chain QSR balance has dropped — that happens once the block is
+ * produced into a momentum (seconds later). Releasing synchronously on send
+ * completion opens a window where a concurrent request reads the stale
+ * (pre-debit) balance with the reservation already gone, and over-spends.
+ * Holding the reservation for RESERVATION_HOLD_MS closes that window.
+ *
+ * The timer is unref'd so it never keeps the process (or a test runner) alive.
+ */
+export function scheduleReleaseQsr(amount: number, delayMs = CONFIG.RESERVATION_HOLD_MS): void {
+  const timer = setTimeout(() => releaseQsr(amount), delayMs);
+  if (typeof timer.unref === 'function') timer.unref();
+}
+
 export function getReservedQsr(): number {
   return reservedQsr;
 }

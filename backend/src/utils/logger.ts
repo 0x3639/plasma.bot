@@ -42,9 +42,12 @@ export function sanitize(value: unknown): unknown {
 }
 
 const sanitizeFormat = winston.format((info) => {
-  info.message = sanitize(info.message) as string;
-  if (info.error) {
-    info.error = sanitize(info.error);
+  // Sanitize every enumerable field, not just message/error — winston spreads
+  // structured metadata as sibling top-level properties on `info`, so a secret
+  // passed as e.g. logger.info('...', { apiKey }) would otherwise bypass
+  // redaction entirely. (Symbol keys like level/splat are untouched.)
+  for (const key of Object.keys(info)) {
+    info[key] = sanitize(info[key]);
   }
   return info;
 });

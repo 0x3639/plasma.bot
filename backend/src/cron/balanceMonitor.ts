@@ -1,5 +1,5 @@
 import { receiveAllPending } from '../services/receiveTx.js';
-import { reconcileFusionIds } from './reconcile.js';
+import { reconcileFusionIds, failStaleProcessingRequests } from './reconcile.js';
 import { runUnfuseCycle } from '../services/unfuse.js';
 import { CONFIG } from '../config/index.js';
 import { logger } from '../utils/logger.js';
@@ -15,11 +15,16 @@ async function runCycle(): Promise<void> {
     try { await receiveAllPending(); }
     catch (error) { logger.error('Receive step failed', { error }); }
 
-    // Step 2: Reconcile fusion IDs (also creates DB records for orphaned chain entries)
+    // Step 2: Self-heal stranded per-address locks (DB-only, runs even when the
+    // node is down so a stuck 'processing' record can't outlive node outages)
+    try { await failStaleProcessingRequests(); }
+    catch (error) { logger.error('Stale processing sweep failed', { error }); }
+
+    // Step 3: Reconcile fusion IDs (also creates DB records for orphaned chain entries)
     try { await reconcileFusionIds(); }
     catch (error) { logger.error('Reconcile step failed', { error }); }
 
-    // Step 3: Run unfuse cycle if balance is low
+    // Step 4: Run unfuse cycle if balance is low
     try { await runUnfuseCycle(); }
     catch (error) { logger.error('Unfuse step failed', { error }); }
   } catch (error) {
