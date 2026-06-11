@@ -1,7 +1,8 @@
 import { Hash } from 'znn-typescript-sdk';
 import { getZenon } from './zenon.js';
-import { getKeyPair, getWalletAddress } from './wallet.js';
+import { getKeyPair } from './wallet.js';
 import { serializedSend } from './sendQueue.js';
+import { getAllFusionEntries } from './plasma.js';
 import { getQsrBalance } from './balance.js';
 import { CONFIG } from '../config/index.js';
 import { Fusion } from '../models/Fusion.js';
@@ -73,14 +74,15 @@ export async function runUnfuseCycle(): Promise<void> {
     return;
   }
 
-  // Verify entries still exist on-chain before cancelling
-  const walletAddress = getWalletAddress();
-  const chainEntries = await zenon.embedded.plasma.getEntriesByAddress(walletAddress);
+  // Verify entries still exist on-chain before cancelling. Must be the FULL
+  // paginated list: a fusion absent from it is marked 'unfused' without a
+  // cancel below, so acting on a partial page would silently strand QSR in
+  // entries we believe are reclaimed. getAllFusionEntries throws on a partial
+  // fetch, aborting this cycle instead.
+  const chainEntryList = await getAllFusionEntries();
   const chainIds = new Set<string>();
-  if (chainEntries?.list) {
-    for (const entry of chainEntries.list) {
-      chainIds.add(entry.id.toString());
-    }
+  for (const entry of chainEntryList) {
+    chainIds.add(entry.id.toString());
   }
 
   let expectedBalance = balance;

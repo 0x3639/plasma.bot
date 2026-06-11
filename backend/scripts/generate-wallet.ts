@@ -9,10 +9,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { KeyStore, KeyFile } from 'znn-typescript-sdk';
 
-const PASSWORD = 'dev-password-do-not-use-in-production';
+// The keyfile password must NOT be hardcoded — a committed password gives the
+// keyfile's encryption zero value (anyone with the repo + keyfile can decrypt
+// it and recover the private key). Supply it at runtime:
+//   KEYFILE_PASSWORD='<strong-password>' npx tsx scripts/generate-wallet.ts
+const PASSWORD = process.env.KEYFILE_PASSWORD;
 const OUTPUT_PATH = path.join(import.meta.dirname, '..', 'dev-wallet.json');
 
+const WEAK_PASSWORDS = new Set(['', 'dev-password-do-not-use-in-production', 'password', 'changeme']);
+
 async function main() {
+  if (!PASSWORD || WEAK_PASSWORDS.has(PASSWORD)) {
+    console.error(
+      'Refusing to generate a wallet without a strong KEYFILE_PASSWORD.\n' +
+      "Run with: KEYFILE_PASSWORD='<strong-password>' npx tsx scripts/generate-wallet.ts",
+    );
+    process.exit(1);
+  }
+
   console.log('Generating new wallet...\n');
 
   // Generate a new random wallet

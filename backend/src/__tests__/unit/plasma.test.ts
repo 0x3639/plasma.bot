@@ -50,7 +50,9 @@ describe('fuseToAddress', () => {
     expect(fusion.tier).toBe('low');
     expect(fusion.qsrAmount).toBe(20 * 10 ** 8); // 20 QSR in base units
     expect(fusion.txHash).toBe('mock-tx-hash');
-    expect(fusion.status).toBe('active');
+    // Created as 'pending' — reconcile promotes to 'active' once the fuse is
+    // confirmed on-chain, so a rejected send can't leave a phantom 'active'.
+    expect(fusion.status).toBe('pending');
 
     // Verify it's actually in MongoDB
     const dbRecord = await Fusion.findById(fusion._id);

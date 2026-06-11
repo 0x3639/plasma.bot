@@ -7,7 +7,7 @@ export interface IFusion extends Document {
   tier: 'low' | 'medium' | 'high';
   qsrAmount: number;
   txHash: string;
-  status: 'active' | 'unfusing' | 'unfused' | 'failed';
+  status: 'pending' | 'active' | 'unfusing' | 'unfused' | 'failed';
   fusedAt: Date;
   unfusedAt: Date | null;
   createdAt: Date;
@@ -45,7 +45,11 @@ const fusionSchema = new Schema<IFusion>({
     type: String,
     required: true,
     default: 'active',
-    enum: ['active', 'unfusing', 'unfused', 'failed'],
+    // 'pending' = fuse block sent but not yet confirmed on-chain (reconcile
+    // promotes it to 'active' once a matching chain entry appears). This stops
+    // a fuse that never lands from creating a phantom 'active' record that
+    // blocks the address forever.
+    enum: ['pending', 'active', 'unfusing', 'unfused', 'failed'],
     index: true,
   },
   fusedAt: {

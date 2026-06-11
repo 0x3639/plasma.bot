@@ -14,11 +14,14 @@ export function errorHandler(
     method: req.method,
   });
 
-  const isProduction = CONFIG.NODE_ENV === 'production';
+  // Echo internals only on explicit dev opt-in; anything else (production,
+  // unset, typo'd env) gets the generic message so a misconfigured deploy
+  // can't leak internal error strings.
+  const isDevelopment = CONFIG.NODE_ENV === 'development';
 
   res.status(500).json({
-    error: isProduction
-      ? 'An unexpected error occurred. Please try again later.'
-      : err.message,
+    error: isDevelopment
+      ? err.message
+      : 'An unexpected error occurred. Please try again later.',
   });
 }
