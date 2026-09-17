@@ -11,16 +11,19 @@ let lock = Promise.resolve<unknown>(undefined);
 
 const INTER_TX_DELAY_MS = 2000;
 const SEND_TIMEOUT_MS = 30_000;
+// The beforeSend hook is a single MongoDB round trip (lease refresh); bound it
+// so a slow database cannot stretch a job past the worst case assumed below.
+const BEFORE_SEND_TIMEOUT_MS = 5_000;
 
 /**
  * Upper bound on jobs waiting for the queue. Every queued job admits a request
  * that has already taken a global-cap slot, an address lock and a QSR
  * reservation. The bound is sized against the WORST-case per-job cost
- * (SEND_TIMEOUT_MS + INTER_TX_DELAY_MS = 32s) so that even a queue full of
- * timing-out sends drains inside the 10-minute processing lease
- * (15 x 32s = 8 min): a job that is admitted always reaches its send slot
- * with its lease still valid, and callers beyond the bound get a fast "busy"
- * rejection instead of holding resources they can never use. In normal
+ * (BEFORE_SEND_TIMEOUT_MS + SEND_TIMEOUT_MS + INTER_TX_DELAY_MS = 37s) so that
+ * even a queue full of timing-out jobs drains inside the 10-minute processing
+ * lease (15 x 37s = 9.25 min): a job that is admitted always reaches its send
+ * slot with its lease still valid, and callers beyond the bound get a fast
+ * "busy" rejection instead of holding resources they can never use. In normal
  * operation a job costs ~3s, so the bound represents well under a minute.
  */
 export const MAX_QUEUE_DEPTH = 15;
@@ -51,7 +54,10 @@ function delay(ms: number): Promise<void> {
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   return Promise.race([
-    promise.then((v) => { clearTimeout(timer); return v; }),
+    promise.then(
+      (v) => { clearTimeout(timer); return v; },
+      (e) => { clearTimeout(timer); throw e; },
+    ),
     new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(`Send timeout after ${ms}ms`)), ms);
     }),
@@ -76,7 +82,9 @@ export function serializedSend(
 
   const next = lock.then(async () => {
     try {
-      if (options.beforeSend) await options.beforeSend();
+      if (options.beforeSend) {
+        await withTimeout(Promise.resolve(options.beforeSend()), BEFORE_SEND_TIMEOUT_MS);
+      }
       const result = await withTimeout(zenon.send(block, keyPair), SEND_TIMEOUT_MS);
       await delay(INTER_TX_DELAY_MS);
       return result;

@@ -11,6 +11,7 @@ import {
   _resetForTesting as _resetCommandsForTesting,
 } from '../../telegram/commands.js';
 import { getReservedQsr, tryReserveQsr, _resetForTesting } from '../../services/balance.js';
+import { logger } from '../../utils/logger.js';
 import { createMockAccountInfo, createMockAddress } from '../setup/mocks.js';
 
 const mockSend = vi.fn();
@@ -318,6 +319,36 @@ describe('Telegram /fuse', () => {
       pendingReplies.forEach((resolve) => resolve());
       await Promise.all(dupeRuns);
       expect(_getInFlightForTesting().rejectionReplies).toBe(0);
+    });
+
+    it('fast-failing rejection replies do not amplify into log lines', async () => {
+      let releaseBalance!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseBalance = resolve; });
+      mockGetAccountInfo.mockImplementation(async () => { await gate; return createMockAccountInfo(10_000); });
+      const holders = Array.from({ length: MAX_IN_FLIGHT_COMMANDS }, (_, i) =>
+        makeCtx(`/fuse 20 ${randomAddress()}`, 40_000 + i));
+      const running = holders.map(run);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const warn = vi.spyOn(logger, 'warn');
+      // 60 distinct users; every rejection reply fails immediately (Telegram
+      // 429), which releases its permit at once, so all 60 replies are sent.
+      const flood = Array.from({ length: 60 }, (_, i) => {
+        const c = makeCtx(`/fuse 20 ${randomAddress()}`, 50_000 + i);
+        c.reply.mockRejectedValue(new Error('429: Too Many Requests'));
+        return c;
+      });
+      for (const c of flood) await run(c);
+
+      const replyFailureLogs = warn.mock.calls.filter((call) => String(call[0]) === 'Telegram reply failed');
+      const rejectionLogs = warn.mock.calls.filter((call) => String(call[0]) === 'Telegram command rejected');
+      expect(replyFailureLogs).toHaveLength(1);
+      expect(rejectionLogs).toHaveLength(1);
+      expect(flood.every((c) => c.reply.mock.calls.length === 1)).toBe(true);
+      warn.mockRestore();
+
+      releaseBalance();
+      await Promise.all(running);
     });
 
     it('sequential requests admit exactly the per-user max', async () => {

@@ -317,8 +317,20 @@ describe('Route Integration Tests', () => {
         .post('/api/fuse')
         .send(largeBody);
 
-      // Body parser throws PayloadTooLargeError, errorHandler catches it as 500
-      expect(res.status).toBe(500);
+      // Body parser throws PayloadTooLargeError; errorHandler keeps its 4xx
+      // status instead of reporting a server failure.
+      expect(res.status).toBe(413);
+      expect(res.body.error).toContain('1 KB');
+    });
+
+    it('rejects malformed JSON with 400', async () => {
+      const app = createApp();
+      const res = await request(app)
+        .post('/api/fuse')
+        .set('Content-Type', 'application/json')
+        .send('{"address": ');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('valid JSON');
     });
   });
 

@@ -30,6 +30,14 @@ All six were accepted and remediated on branch `fix/codex-security-audit-2026-09
 | Nit: queue bound did not guarantee draining inside the lease. | `MAX_QUEUE_DEPTH` is now 15, sized against the worst-case 32s/job so a full queue drains in 8 min < the 10-minute lease. |
 | Nit: collision-failed records stayed uppercase. | They are lowercased in the same write (the unique partial index no longer applies once the record is failed). |
 
+## Round 4 (Codex re-review of round 3) — final round
+
+| Finding | Fix |
+|---------|-----|
+| Fast-failing rejection replies logged through the unthrottled generic "Telegram reply failed" warning. | Reply-delivery failures are throttled to one line per 10s with a `suppressedSinceLastLog` count. Test: 60 distinct users whose rejection replies fail immediately produce exactly one reply-failure line and one rejection line. |
+| Production body-parser failures (malformed JSON, > 1 KB body) returned a generic 500 outside the documented envelope; the contract test bypassed the real middleware. | `errorHandler` classifies `express.json()` errors and keeps their 4xx status: `400 INVALID_JSON`, `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`, `400 BAD_REQUEST`; unexpected errors on the agent API are `500 INTERNAL_ERROR` in the envelope. OpenAPI/README/llms.txt updated. The contract test now mounts the production stack (`setupSecurity` + route + `errorHandler`), scans `errorHandler.ts` for emitted codes, and exercises malformed JSON, oversized JSON, end-to-end `RATE_LIMITED` (per-IP limiter via trusted `X-Forwarded-For`) and end-to-end `REQUEST_EXPIRED` (lease swept inside the queue slot). |
+| Nit: queue-depth arithmetic ignored `beforeSend` latency. | `beforeSend` is bounded by `BEFORE_SEND_TIMEOUT_MS` (5s); worst case is now 15 × 37s = 9.25 min < the 10-minute lease. |
+
 ## Shared lifecycle
 
 The web, agent-API and Telegram handlers now all delegate to `services/fuseExecutor.ts` for the

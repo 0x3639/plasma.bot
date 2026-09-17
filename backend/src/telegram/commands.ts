@@ -37,12 +37,32 @@ function reply(ctx: Context, text: string): Promise<void> {
     .reply(text, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } })
     .then(() => undefined)
     .catch((error: unknown) => {
-      logger.warn('Telegram reply failed', {
-        error,
-        chatId: ctx.chat?.id,
-        telegramUserId: ctx.from?.id,
-      });
+      logReplyFailureThrottled(error, ctx);
     });
+}
+
+// Delivery failures are throttled to one line per interval (with a count of
+// the ones suppressed). During a Telegram outage or a 429 storm every reply
+// fails quickly, and the fast-failing rejection replies would otherwise turn
+// the log into the amplifier that bounding the replies themselves prevented.
+const REPLY_FAILURE_LOG_INTERVAL_MS = 10_000;
+let lastReplyFailureLogAt = 0;
+let suppressedReplyFailures = 0;
+
+function logReplyFailureThrottled(error: unknown, ctx: Context): void {
+  const now = Date.now();
+  if (now - lastReplyFailureLogAt < REPLY_FAILURE_LOG_INTERVAL_MS) {
+    suppressedReplyFailures++;
+    return;
+  }
+  lastReplyFailureLogAt = now;
+  logger.warn('Telegram reply failed', {
+    error,
+    chatId: ctx.chat?.id,
+    telegramUserId: ctx.from?.id,
+    suppressedSinceLastLog: suppressedReplyFailures,
+  });
+  suppressedReplyFailures = 0;
 }
 
 /**
@@ -100,6 +120,8 @@ export function _getInFlightForTesting(): {
 export function _resetForTesting(): void {
   droppedRejections = 0;
   lastRejectionLogAt = 0;
+  lastReplyFailureLogAt = 0;
+  suppressedReplyFailures = 0;
 }
 
 function logRejectionThrottled(reason: string, telegramUserId: number | undefined): void {

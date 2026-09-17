@@ -46,11 +46,24 @@
             }
           },
           "400": {
-            "description": "Validation failed",
+            "description": "Validation failed, or the body is not valid JSON",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/ValidationError" },
+                    { "$ref": "#/components/schemas/InvalidJsonError" }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 1 KB limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayloadTooLargeError"
                 }
               }
             }
@@ -93,11 +106,14 @@
             }
           },
           "500": {
-            "description": "Fusion transaction failed",
+            "description": "Fusion transaction failed, or an unexpected internal error",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FuseFailedError"
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/FuseFailedError" },
+                    { "$ref": "#/components/schemas/InternalError" }
+                  ]
                 }
               }
             }
@@ -274,6 +290,45 @@
               "available": { "type": "number" },
               "needed": { "type": "number" },
               "nextUnfuseAt": { "type": "string", "nullable": true, "format": "date-time" }
+            }
+          }
+        }
+      },
+      "InvalidJsonError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["INVALID_JSON", "BAD_REQUEST"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "PayloadTooLargeError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["PAYLOAD_TOO_LARGE"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["INTERNAL_ERROR"] },
+              "message": { "type": "string" }
             }
           }
         }
