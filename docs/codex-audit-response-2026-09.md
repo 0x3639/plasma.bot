@@ -46,7 +46,30 @@ review loop was capped at four rounds, so these were handled as follows:
 | Finding | Status |
 |---------|--------|
 | Low: public fuse traffic can fill the bounded send queue and starve receive/unfuse maintenance; `receiveAllPending` then refetches the same page up to 20 times, logging each failure; queue-full fuse rejections log individually. (A regression introduced by the round-1 queue bound.) | **Fixed on the branch, not re-reviewed by Codex.** `serializedSend` has a `priority` lane exempt from `MAX_QUEUE_DEPTH`, used by `receiveAllPending` and the unfuse cycle (both already bounded by their own cycles). `receiveAllPending` stops its cycle on `SendQueueFullError` instead of refetching. Queue-full fuse rejections log one line per 10s with a suppressed count. Tests: priority job admitted when the queue is full; receive cycle fetches once and stops; a never-settling `beforeSend` times out after 5s and the next job proceeds. |
-| Medium (code review): the deployed `Caddyfile` enforces `request_body max_size 1KB` ahead of `reverse_proxy`, so an oversized agent request gets Caddy's plain 413 instead of the documented `PAYLOAD_TOO_LARGE` envelope. | **Open — needs an ingress change.** The `Caddyfile` currently carries uncommitted Cloudflare mTLS work, so it was left untouched. Suggested fix: add a `handle_errors` block that answers 413 on `/api/agent/*` with `{"success":false,"error":{"code":"PAYLOAD_TOO_LARGE","message":"Request body exceeds the 1 KB limit"}}` (`respond` with `header Content-Type application/json`), and a proxy-level test. Alternatively raise Caddy's limit slightly above Express's 1 KB so Express always produces the envelope. |
+| Medium (code review): the deployed `Caddyfile` enforces `request_body max_size 1KB` ahead of `reverse_proxy`, so an oversized agent request gets Caddy's plain 413 instead of the documented `PAYLOAD_TOO_LARGE` envelope. | **Deferred to a separate ingress review** — see "Deferred: Caddy ingress" below. |
+
+## Deferred: Caddy ingress (out of scope for this branch)
+
+**Decision (2026-09-17):** the Caddy 413 contract gap is intentionally NOT addressed on this branch. It
+is an ingress/deployment change, the `Caddyfile` currently carries unrelated, uncommitted Cloudflare
+authenticated-origin-pull work, and it cannot be tested by the backend suite. It will be handled in a
+separate branch and its own Codex review.
+
+What that follow-up needs to cover:
+
+1. `Caddyfile`: `request_body { max_size 1KB }` runs before `reverse_proxy`, so Caddy answers oversized
+   bodies with a bare 413 and Express never emits `{"success":false,"error":{"code":"PAYLOAD_TOO_LARGE",...}}`.
+   Options: (a) a `handle_errors` block matching status 413 on `/api/agent/*` that responds with the JSON
+   envelope and `Content-Type: application/json`; or (b) raise Caddy's limit slightly above Express's 1 KB
+   so Express always produces the documented envelope.
+2. A proxy-level regression test (e.g. `curl` against a local Caddy + backend compose stack) asserting the
+   full JSON envelope for an oversized agent request.
+3. Re-check README/`llms.txt`/OpenAPI wording ("all errors use the structured envelope") once the ingress
+   behaviour is settled.
+
+Until then the application-level contract (everything Express itself emits) is complete and tested; only
+the Caddy-generated 413 falls outside it.
+
 
 ## Shared lifecycle
 
