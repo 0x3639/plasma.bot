@@ -46,44 +46,74 @@
             }
           },
           "400": {
-            "description": "Validation failed",
+            "description": "Validation failed, or the body is not valid JSON",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/ValidationError" },
+                    { "$ref": "#/components/schemas/InvalidJsonError" }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 1 KB limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayloadTooLargeError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type is not application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedMediaTypeError"
                 }
               }
             }
           },
           "429": {
-            "description": "Rate limited (IP quota exceeded or address has active fusion)",
+            "description": "Rate limited (IP quota exceeded, address has an active or in-flight fusion, or the service-wide daily cap is reached)",
             "content": {
               "application/json": {
                 "schema": {
                   "oneOf": [
                     { "$ref": "#/components/schemas/RateLimitedError" },
-                    { "$ref": "#/components/schemas/AddressUnavailableError" }
+                    { "$ref": "#/components/schemas/AddressUnavailableError" },
+                    { "$ref": "#/components/schemas/GlobalLimitReachedError" }
                   ]
                 }
               }
             }
           },
           "503": {
-            "description": "Insufficient QSR balance",
+            "description": "Insufficient QSR balance, service busy, request expired while queued, or service unavailable",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InsufficientBalanceError"
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/InsufficientBalanceError" },
+                    { "$ref": "#/components/schemas/ServiceError" }
+                  ]
                 }
               }
             }
           },
           "500": {
-            "description": "Fusion transaction failed",
+            "description": "Fusion transaction failed, or an unexpected internal error",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FuseFailedError"
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/FuseFailedError" },
+                    { "$ref": "#/components/schemas/InternalError" }
+                  ]
                 }
               }
             }
@@ -126,7 +156,7 @@
           {
             "name": "page",
             "in": "query",
-            "schema": { "type": "integer", "default": 1, "minimum": 1 }
+            "schema": { "type": "integer", "default": 1, "minimum": 1, "maximum": 10000 }
           },
           {
             "name": "limit",
@@ -260,6 +290,84 @@
               "available": { "type": "number" },
               "needed": { "type": "number" },
               "nextUnfuseAt": { "type": "string", "nullable": true, "format": "date-time" }
+            }
+          }
+        }
+      },
+      "InvalidJsonError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["INVALID_JSON", "BAD_REQUEST"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "PayloadTooLargeError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["PAYLOAD_TOO_LARGE"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["INTERNAL_ERROR"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "UnsupportedMediaTypeError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["UNSUPPORTED_MEDIA_TYPE"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "GlobalLimitReachedError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["GLOBAL_LIMIT_REACHED"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "ServiceError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["SERVICE_BUSY", "REQUEST_EXPIRED", "SERVICE_UNAVAILABLE"] },
+              "message": { "type": "string" }
             }
           }
         }

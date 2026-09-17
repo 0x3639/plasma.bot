@@ -66,6 +66,11 @@ export const CONFIG = {
   // Pagination defaults
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,
+  // Highest page number accepted by paginated public reads. Bounds the
+  // computed MongoDB skip (page * limit) to a safe integer that the driver
+  // accepts, instead of letting a caller pass 1e308 and produce an Infinity
+  // offset the query rejects.
+  MAX_PAGE_NUMBER: 10_000,
 
   // QSR decimals (8 decimal places)
   QSR_DECIMALS: 8,

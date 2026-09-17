@@ -1,0 +1,110 @@
+# Codex Security Audit Response — 2026-09
+
+Audit: Codex Daybreak static review of revision `328e0b2` (6 findings: 3 medium, 3 low).
+All six were accepted and remediated on branch `fix/codex-security-audit-2026-09`.
+
+| # | Finding | Severity | Fix |
+|---|---------|----------|-----|
+| 1 | Uppercase Telegram addresses bypass the one-fusion limit | Medium | Telegram `/fuse` and `/fuse status` canonicalize via `canonicalizeAddress()` (`Address.parse(x).toString()`) before every check, lock, record and reply. `fuseToAddress` stores the canonical form for every entry point. `scripts/canonicalize-addresses.mjs` lowercases legacy records and runs in the deploy migration step. |
+| 2 | One failed Telegram reply can stop the bot for every user | Medium | `bot.catch()` installs a logging (non-throwing) update-error handler. Every reply is best-effort (`reply()` never rejects) and `handleFuseCommand` is its own error boundary. The command handler is detached so a queued fuse cannot stall the polling batch. `startTelegramBot` now uses Telegraf's `onLaunch` callback (polling-mode `launch()` never resolves, so the old 15s race always logged a spurious failure) and supervises the loop: if it ends while not stopped, a fresh instance is launched with 1s→60s exponential backoff. |
+| 3 | Concurrent Telegram commands exceed the per-user daily quota | Medium | `confirmTelegramUserSlot()` re-counts the user's requests after the `processing` record is inserted (same count-after-insert argument as the global cap): at most `max` requests can observe `count <= max`. Losers are rolled back to `rate_limited`, which frees their address lock and global slot and is excluded from the user count so a burst does not burn remaining quota. |
+| 4 | The stale sweeper releases quota and address locks for live queued sends | Low | Processing leases are revalidated inside the send-queue slot (`assertFuseLeaseHeld`, via `serializedSend`'s new `beforeSend` hook): if the sweeper already released the lease, nothing is signed and the reservation is released immediately. The lease check bumps `updatedAt`, and the sweeper now keys off `updatedAt`, so a job mid-send is never released. The send queue is bounded (`MAX_QUEUE_DEPTH = 50`) so callers get a fast `503 SERVICE_BUSY` instead of waiting past the lease window. |
+| 5 | Oversized pagination values leave fusion-list requests unanswered | Low | `page` is bounded by `CONFIG.MAX_PAGE_NUMBER` (10 000), keeping `skip` a safe integer. Both listing routes are wrapped in `asyncHandler`, which forwards rejections to the error middleware (generic 500). |
+| 6 | A failed Telegram reply corrupts completed-fusion accounting | Low | Transaction outcome and notification are separated: `executeFuse()` settles record state and the reservation before any reply is attempted. Reservations are owned tokens (`QsrReservation`) whose `release()` / `scheduleRelease()` are idempotent, so no path can decrement the shared counter twice. |
+
+## Round 2 (Codex re-review of round 1)
+
+| Finding | Fix |
+|---------|-----|
+| Deploy race: the previous backend container keeps serving old (non-canonicalizing) code while the canonicalization migration runs, so it can write an uppercase record the migration never sees. | `canonicalizeStoredAddresses()` now also runs at backend startup, after the DB connect and before any entry point is served; startup fails closed if it errors. The deploy migration is kept as an explicit, observable step. |
+| Detached Telegram command handlers remove the polling batch's back-pressure, leaving pre-admission DB/node work unbounded. | `handleFuseCommand` bounds concurrency: at most `MAX_IN_FLIGHT_COMMANDS` (16) commands in flight (extra callers get an immediate "busy" reply and no work is done) and at most one in-flight command per Telegram user. `confirmTelegramUserSlot` stays as the durable DB-level guarantee. |
+| A launch timeout cannot stop Telegraf while `getMe()` is pending, so a timed-out instance could later become an untracked poller; relaunches had no start timeout. | Every launch (first and relaunch) goes through `launchAndAwaitStart` with the same timeout. A launch that fails or times out is *abandoned*: its `onLaunch` hook stops the instance as soon as Telegraf's polling object exists, so it can never poll untracked. |
+
+## Round 3 (Codex re-review of round 2)
+
+| Finding | Fix |
+|---------|-----|
+| Overload/duplicate-user rejection replies ran before admission accounting and were unbounded (P3). | `rejectCommand()` coalesces to one pending rejection reply per user and caps total pending rejection replies at `MAX_IN_FLIGHT_REJECTION_REPLIES` (8); anything beyond is dropped without starting a network operation. Rejection logging is throttled to one line per 10s with a dropped count. |
+| `started` was derived from Telegraf's `onLaunch`, which fires before `deleteWebhook`/`startPolling`; abandonment retries were time-boxed, and a stop during the first launch was not handled. | Readiness is now the instance's first real `getUpdates` request, observed through the public `telegram.callApi` entry point. At that moment the polling object exists, so an abandoned launch is stopped deterministically (no retry budget); if the launch ends first there is nothing to stop. `startTelegramBot` abandons the instance if `stopTelegramBot()` ran while it was launching. |
+| OpenAPI/README/llms.txt missed emitted codes and the pagination bound. | Added `415 UNSUPPORTED_MEDIA_TYPE`, `GLOBAL_LIMIT_REACHED` under 429, `SERVICE_UNAVAILABLE`, and `page.maximum = 10000`. A contract test now (a) asserts every `code:` literal the agent route can emit is declared in `openapi.json`, (b) asserts README and llms.txt list every declared code, (c) checks the page maximum against `CONFIG`, and (d) exercises each status end-to-end. |
+| Nit: queue bound did not guarantee draining inside the lease. | `MAX_QUEUE_DEPTH` is now 15, sized against the worst-case 32s/job so a full queue drains in 8 min < the 10-minute lease. |
+| Nit: collision-failed records stayed uppercase. | They are lowercased in the same write (the unique partial index no longer applies once the record is failed). |
+
+## Round 4 (Codex re-review of round 3) — final round
+
+| Finding | Fix |
+|---------|-----|
+| Fast-failing rejection replies logged through the unthrottled generic "Telegram reply failed" warning. | Reply-delivery failures are throttled to one line per 10s with a `suppressedSinceLastLog` count. Test: 60 distinct users whose rejection replies fail immediately produce exactly one reply-failure line and one rejection line. |
+| Production body-parser failures (malformed JSON, > 1 KB body) returned a generic 500 outside the documented envelope; the contract test bypassed the real middleware. | `errorHandler` classifies `express.json()` errors and keeps their 4xx status: `400 INVALID_JSON`, `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`, `400 BAD_REQUEST`; unexpected errors on the agent API are `500 INTERNAL_ERROR` in the envelope. OpenAPI/README/llms.txt updated. The contract test now mounts the production stack (`setupSecurity` + route + `errorHandler`), scans `errorHandler.ts` for emitted codes, and exercises malformed JSON, oversized JSON, end-to-end `RATE_LIMITED` (per-IP limiter via trusted `X-Forwarded-For`) and end-to-end `REQUEST_EXPIRED` (lease swept inside the queue slot). |
+| Nit: queue-depth arithmetic ignored `beforeSend` latency. | `beforeSend` is bounded by `BEFORE_SEND_TIMEOUT_MS` (5s); worst case is now 15 × 37s = 9.25 min < the 10-minute lease. |
+
+### Round 4 outcome
+
+Codex confirmed every item from the original audit and rounds 1–3 closed, and raised two new items. The
+review loop was capped at four rounds, so these were handled as follows:
+
+| Finding | Status |
+|---------|--------|
+| Low: public fuse traffic can fill the bounded send queue and starve receive/unfuse maintenance; `receiveAllPending` then refetches the same page up to 20 times, logging each failure; queue-full fuse rejections log individually. (A regression introduced by the round-1 queue bound.) | **Fixed on the branch, not re-reviewed by Codex.** `serializedSend` has a `priority` lane exempt from `MAX_QUEUE_DEPTH`, used by `receiveAllPending` and the unfuse cycle (both already bounded by their own cycles). `receiveAllPending` stops its cycle on `SendQueueFullError` instead of refetching. Queue-full fuse rejections log one line per 10s with a suppressed count. Tests: priority job admitted when the queue is full; receive cycle fetches once and stops; a never-settling `beforeSend` times out after 5s and the next job proceeds. |
+| Medium (code review): the deployed `Caddyfile` enforces `request_body max_size 1KB` ahead of `reverse_proxy`, so an oversized agent request gets Caddy's plain 413 instead of the documented `PAYLOAD_TOO_LARGE` envelope. | **Deferred to a separate ingress review** — see "Deferred: Caddy ingress" below. |
+
+## Round 5 — Codex verdict: APPROVE WITH NITS
+
+Codex re-reviewed `328e0b2...0f876ba` with the Caddy item excluded: no reportable security findings, no
+blocking defects, and every item from the original audit and rounds 1–4 confirmed closed. Three optional
+nits were applied afterwards:
+
+| Nit | Fix |
+|-----|-----|
+| Queue-drain comment overstated the availability guarantee (pre-queue latency excluded). | Comment now states the bound covers time in the queue only and that a rare `REQUEST_EXPIRED` remains possible and safe. |
+| Contract suite lacked end-to-end `BAD_REQUEST` and `INTERNAL_ERROR`. | Fault-injection routes under `/api/agent/` exercise both through the production error handler. |
+| Missing focused tests for queue-full log throttling and unfuse priority/rollback. | `fuseExecutor.test.ts` asserts one warning per 10s with the suppressed count; new `unfuse.test.ts` asserts `{ priority: true }` and rollback to `active` after a failed cancel. |
+
+## PR review follow-ups (CodeRabbit)
+
+| Comment | Fix |
+|---------|-----|
+| Deploy leaves the previous backend running while migrations execute. | `docker compose stop backend` before the migration step, so no migration ever runs against a live writer. The startup canonicalization sweep stays as defence in depth. |
+| `GET /api/fusions/:address` kept the raw path value, so an uppercase encoding could not find its (canonical) history. | The route canonicalizes the parameter, uses it for validation, the query and the response; a well-formed address with a bad checksum is now a 400 instead of an empty 200. |
+| A transient first-launch failure (DNS, Telegram 5xx, slow `getMe`) left the Telegram bot down until process restart. | A failed or timed-out first launch is handed to the same supervisor/backoff loop as a post-start failure; `startTelegramBot()` no longer rejects for launch failures. |
+
+## Deferred: Caddy ingress (out of scope for this branch)
+
+**Decision (2026-09-17):** the Caddy 413 contract gap is intentionally NOT addressed on this branch. It
+is an ingress/deployment change, the `Caddyfile` currently carries unrelated, uncommitted Cloudflare
+authenticated-origin-pull work, and it cannot be tested by the backend suite. It will be handled in a
+separate branch and its own Codex review.
+
+What that follow-up needs to cover:
+
+1. `Caddyfile`: `request_body { max_size 1KB }` runs before `reverse_proxy`, so Caddy answers oversized
+   bodies with a bare 413 and Express never emits `{"success":false,"error":{"code":"PAYLOAD_TOO_LARGE",...}}`.
+   Options: (a) a `handle_errors` block matching status 413 on `/api/agent/*` that responds with the JSON
+   envelope and `Content-Type: application/json`; or (b) raise Caddy's limit slightly above Express's 1 KB
+   so Express always produces the documented envelope.
+2. A proxy-level regression test (e.g. `curl` against a local Caddy + backend compose stack) asserting the
+   full JSON envelope for an oversized agent request.
+3. Re-check README/`llms.txt`/OpenAPI wording ("all errors use the structured envelope") once the ingress
+   behaviour is settled.
+
+Until then the application-level contract (everything Express itself emits) is complete and tested; only
+the Caddy-generated 413 falls outside it.
+
+
+## Shared lifecycle
+
+The web, agent-API and Telegram handlers now all delegate to `services/fuseExecutor.ts` for the
+send/persist/release lifecycle, which is the "shared admission or lifecycle boundary" the audit
+recommended for these invariants.
+
+## Tests added
+
+- `telegramCommands.test.ts` — uppercase alias rejected against DB, processing lock and chain state; canonical storage; a one-user burst is rejected up front (one in-flight command per user); the global in-flight bound rejects extra commands without doing any work; a flood of 50 rejections with replies that never settle starts at most 8 replies, one per user, and drops the rest; sequential requests admit exactly the max; replies that reject never escape and never alter a completed request or double-release a reservation.
+- `telegramBot.test.ts` — the fake models Telegraf's real phases (`getMe`/`onLaunch`, then `deleteWebhook`, then first `getUpdates`); start resolves only on the first `getUpdates`; failed/timed-out first launch rejects; a timed-out instance is stopped the instant it starts polling, even 20 minutes later; a stop during the initial launch prevents polling; relaunches honour the start timeout; loop death triggers relaunch with exponential backoff and no unhandled rejection; explicit stop suppresses relaunch; non-throwing error handler registered.
+- `telegramRateLimiter.test.ts` — concurrent post-insert confirmations admit at most the per-user max; sequential admit exactly the max; `rate_limited` rollbacks do not consume quota.
+- `canonicalizeRecords.test.ts` — startup canonicalization of both collections; colliding processing lock is failed and lowercased; idempotent no-op.
+- `agentFuseContract.test.ts` — OpenAPI/README/llms.txt contract checks and one request per emitted status/code.
+- `fuseExecutor.test.ts` — success holds the reservation once; swept lease aborts without signing; queue-full and send-failure paths.
+- `reconcile.test.ts` — refreshed lease survives the sweep; swept lease cannot be reacquired.
+- `sendQueue.test.ts` — `beforeSend` ordering, hook failure does not poison the queue, depth bound and recovery.
+- `routes.test.ts` — huge/oversized `page` values return 400; DB rejection returns the generic 500 on both listing routes.

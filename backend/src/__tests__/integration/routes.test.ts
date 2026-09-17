@@ -44,9 +44,8 @@ vi.mock('znn-typescript-sdk', async () => {
   const actual = await vi.importActual('znn-typescript-sdk') as Record<string, unknown>;
   return {
     ...actual,
-    Address: {
-      parse: (addr: string) => ({ toString: () => addr }),
-    },
+    // Real Address (checksum + canonical form matter for the status route);
+    // the one address these tests use is a valid, canonical user address.
     Hash: {
       parse: (hash: string) => hash,
     },
@@ -190,6 +189,72 @@ describe('Route Integration Tests', () => {
   });
 
   // --- Fusions by address ---
+  describe('GET /api/fusions/:address canonicalization', () => {
+    const addr = 'z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0';
+
+    it('accepts the uppercase encoding and returns the canonical history', async () => {
+      await Fusion.create({
+        beneficiary: addr, tier: 'low', qsrAmount: 2000000000,
+        txHash: 'tx-canon', status: 'active', fusedAt: new Date(),
+      });
+      const app = createApp();
+      const res = await request(app).get(`/api/fusions/${addr.toUpperCase()}`);
+      expect(res.status).toBe(200);
+      expect(res.body.address).toBe(addr);
+      expect(res.body.fusions).toHaveLength(1);
+    });
+
+    it('rejects a well-formed address with a bad checksum', async () => {
+      const app = createApp();
+      const bad = addr.slice(0, -1) + (addr.endsWith('0') ? '1' : '0');
+      const res = await request(app).get(`/api/fusions/${bad}`);
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /api/fusions pagination hardening', () => {
+    it('rejects a huge page number with 400 instead of hanging', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/fusions?page=1e308&limit=100');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Invalid pagination');
+    });
+
+    it('rejects a page beyond MAX_PAGE_NUMBER', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/fusions?page=10001');
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a huge page on the per-address route', async () => {
+      const app = createApp();
+      const res = await request(app).get(`/api/fusions/z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0?page=99999999999999999999`);
+      expect(res.status).toBe(400);
+    });
+
+    it('answers with the generic 500 when the database query rejects', async () => {
+      const spy = vi.spyOn(Fusion, 'countDocuments').mockImplementationOnce(() => {
+        throw new Error('db down');
+      });
+      const app = createApp();
+      const res = await request(app).get('/api/fusions');
+      expect(res.status).toBe(500);
+      expect(res.body.error).toBeDefined();
+      expect(res.body.error).not.toContain('db down');
+      spy.mockRestore();
+    });
+
+    it('answers with the generic 500 when the per-address query rejects', async () => {
+      const spy = vi.spyOn(Fusion, 'countDocuments').mockImplementationOnce(() => {
+        throw new Error('db down');
+      });
+      const app = createApp();
+      const res = await request(app).get(`/api/fusions/z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0`);
+      expect(res.status).toBe(500);
+      spy.mockRestore();
+    });
+  });
+
   describe('GET /api/fusions/:address', () => {
     it('returns fusions for a specific address', async () => {
       const addr = 'z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0';
@@ -274,8 +339,20 @@ describe('Route Integration Tests', () => {
         .post('/api/fuse')
         .send(largeBody);
 
-      // Body parser throws PayloadTooLargeError, errorHandler catches it as 500
-      expect(res.status).toBe(500);
+      // Body parser throws PayloadTooLargeError; errorHandler keeps its 4xx
+      // status instead of reporting a server failure.
+      expect(res.status).toBe(413);
+      expect(res.body.error).toContain('1 KB');
+    });
+
+    it('rejects malformed JSON with 400', async () => {
+      const app = createApp();
+      const res = await request(app)
+        .post('/api/fuse')
+        .set('Content-Type', 'application/json')
+        .send('{"address": ');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('valid JSON');
     });
   });
 

@@ -3,8 +3,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { fuseRequestSchema, type FuseRequestBody } from '../middleware/validate.js';
 import { agentIpRateLimiter, agentGlobalDailyLimiter, confirmGlobalCapSlot, checkAddressAvailability } from '../middleware/rateLimiter.js';
-import { fuseToAddress } from '../services/plasma.js';
-import { getQsrBalance, tryReserveQsr, scheduleReleaseQsr } from '../services/balance.js';
+import { executeFuse } from '../services/fuseExecutor.js';
+import { getQsrBalance, tryReserveQsr } from '../services/balance.js';
 import { getNextUnfuseTime } from '../services/unfuse.js';
 import { CONFIG, type FuseTier } from '../config/index.js';
 import { FuseRequest } from '../models/FuseRequest.js';
@@ -165,7 +165,8 @@ router.post(
       return;
     }
 
-    if (!tryReserveQsr(tierQsr, balance)) {
+    const reservation = tryReserveQsr(tierQsr, balance);
+    if (!reservation) {
       fuseRequest.status = 'failed';
       fuseRequest.errorMessage = 'Insufficient QSR balance for this tier';
       await fuseRequest.save();
@@ -188,42 +189,40 @@ router.post(
       return;
     }
 
-    try {
-      const fusion = await fuseToAddress(address, tier as FuseTier);
+    // Shared lifecycle: lease revalidation before signing, terminal record
+    // state, and exactly-once reservation release all live in executeFuse.
+    const outcome = await executeFuse(fuseRequest, tier as FuseTier, reservation);
 
-      fuseRequest.status = 'completed';
-      fuseRequest.fusion = fusion._id;
-      await fuseRequest.save();
-
-      // Hold the reservation across the chain-confirmation window, then release.
-      scheduleReleaseQsr(tierQsr);
-
+    if (outcome.ok) {
       res.status(200).json({
         success: true,
-        txHash: fusion.txHash,
+        txHash: outcome.fusion.txHash,
         address,
         tier,
         amount: tierQsr,
       });
-    } catch (error) {
-      logger.error('Agent fuse request failed', { error, address, tier });
+      return;
+    }
 
-      fuseRequest.status = 'failed';
-      fuseRequest.errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await fuseRequest.save().catch(() => undefined);
-
-      // A send "failure" can be a timeout on a block that still lands in a
-      // momentum seconds later, so hold the reservation across the
-      // confirmation window instead of releasing it against a stale balance.
-      scheduleReleaseQsr(tierQsr);
-
-      res.status(500).json({
-        success: false,
-        error: {
-          code: 'FUSE_FAILED',
-          message: 'Failed to fuse plasma. Please try again later.',
-        },
-      });
+    switch (outcome.code) {
+      case 'QUEUE_FULL':
+        res.status(503).json({
+          success: false,
+          error: { code: 'SERVICE_BUSY', message: 'The fuse service is busy. Please try again in a few minutes.' },
+        });
+        return;
+      case 'LEASE_LOST':
+        res.status(503).json({
+          success: false,
+          error: { code: 'REQUEST_EXPIRED', message: 'Your request expired before it could be sent. Please try again.' },
+        });
+        return;
+      case 'FUSE_FAILED':
+        res.status(500).json({
+          success: false,
+          error: { code: 'FUSE_FAILED', message: 'Failed to fuse plasma. Please try again later.' },
+        });
+        return;
     }
   },
 );

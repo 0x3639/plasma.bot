@@ -3,7 +3,8 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { Fusion } from '../models/Fusion.js';
 import { CONFIG } from '../config/index.js';
-import { isValidAddressFormat } from '../utils/address.js';
+import { canonicalizeAddress } from '../utils/address.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
 
@@ -16,13 +17,16 @@ router.use(rateLimit({
   legacyHeaders: false,
 }));
 
+// Both `page` and `limit` are bounded so the computed skip stays a safe
+// integer MongoDB accepts; an unbounded page (e.g. 1e308) would overflow to
+// an offset the driver rejects.
 const paginationSchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
+  page: z.coerce.number().int().min(1).max(CONFIG.MAX_PAGE_NUMBER).default(1),
   limit: z.coerce.number().int().min(1).max(CONFIG.MAX_PAGE_SIZE).default(CONFIG.DEFAULT_PAGE_SIZE),
 });
 
 // GET /api/fusions — all active fusions (paginated, newest first)
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const parsed = paginationSchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid pagination parameters' });
@@ -58,13 +62,15 @@ router.get('/', async (req, res) => {
     page,
     totalPages: Math.ceil(total / limit),
   });
-});
+}));
 
 // GET /api/fusions/:address — fusions for a specific address (paginated, newest first)
-router.get('/:address', async (req, res) => {
-  const { address } = req.params;
+router.get('/:address', asyncHandler<{ address: string }>(async (req, res) => {
+  // Stored beneficiaries are canonical (lowercase bech32); accept any valid
+  // encoding of the address and query/echo the canonical form.
+  const address = canonicalizeAddress(req.params.address);
 
-  if (!isValidAddressFormat(address)) {
+  if (!address) {
     res.status(400).json({ error: 'Invalid Zenon address format' });
     return;
   }
@@ -106,6 +112,6 @@ router.get('/:address', async (req, res) => {
     page,
     totalPages: Math.ceil(total / limit),
   });
-});
+}));
 
 export default router;

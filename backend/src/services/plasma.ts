@@ -1,7 +1,7 @@
 import { Address } from 'znn-typescript-sdk';
 import { getZenon } from './zenon.js';
 import { getKeyPair, getWalletAddress } from './wallet.js';
-import { serializedSend } from './sendQueue.js';
+import { serializedSend, type SerializedSendOptions } from './sendQueue.js';
 import { CONFIG, type FuseTier } from '../config/index.js';
 import { Fusion } from '../models/Fusion.js';
 import { logger } from '../utils/logger.js';
@@ -53,6 +53,7 @@ export async function getAllFusionEntries(): Promise<ChainFusionEntry[]> {
 export async function fuseToAddress(
   beneficiaryStr: string,
   tier: FuseTier,
+  sendOptions: SerializedSendOptions = {},
 ): Promise<typeof Fusion.prototype> {
   const zenon = getZenon();
   const keyPair = getKeyPair();
@@ -62,10 +63,13 @@ export async function fuseToAddress(
   // Convert to base units (8 decimals)
   const qsrBaseUnits = BigInt(qsrHuman) * BigInt(10 ** CONFIG.QSR_DECIMALS);
 
+  // Canonical (lowercase bech32) form: the DB key must match the on-chain
+  // identity even if a caller passed an uppercase encoding.
   const beneficiary = Address.parse(beneficiaryStr);
+  const beneficiaryCanonical = beneficiary.toString();
 
   logger.info('Fusing QSR', {
-    beneficiary: beneficiaryStr,
+    beneficiary: beneficiaryCanonical,
     tier,
     qsr: qsrHuman,
   });
@@ -74,7 +78,7 @@ export async function fuseToAddress(
   const fuseBlock = zenon.embedded.plasma.fuse(beneficiary, qsrBaseUnits.toString());
 
   // Send via serialized queue
-  const result = await serializedSend(fuseBlock, keyPair) as { hash?: { toString(): string } };
+  const result = await serializedSend(fuseBlock, keyPair, sendOptions) as { hash?: { toString(): string } };
 
   const txHash = result?.hash?.toString() || 'unknown';
 
@@ -83,7 +87,7 @@ export async function fuseToAddress(
   // to 'active' once it matches a real chain entry. This prevents a rejected
   // fuse from leaving a phantom 'active' record that blocks the address.
   const fusion = await Fusion.create({
-    beneficiary: beneficiaryStr,
+    beneficiary: beneficiaryCanonical,
     tier,
     qsrAmount: Number(qsrBaseUnits),
     txHash,
@@ -94,7 +98,7 @@ export async function fuseToAddress(
   logger.info('Fusion created', {
     id: fusion._id,
     txHash,
-    beneficiary: beneficiaryStr,
+    beneficiary: beneficiaryCanonical,
     tier,
     qsr: qsrHuman,
   });

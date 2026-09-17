@@ -13,6 +13,20 @@ export function parseZenonAddress(address: string): Address | null {
 }
 
 /**
+ * Parse an address and return its canonical (lowercase bech32) string form,
+ * or null if it is not a valid Zenon address.
+ *
+ * Bech32 accepts an all-uppercase encoding of the same address. Every
+ * database lookup, lock and audit record must use this canonical form so
+ * that `Z1...` and `z1...` are treated as the same beneficiary they are
+ * on-chain.
+ */
+export function canonicalizeAddress(address: string): string | null {
+  const parsed = parseZenonAddress(address);
+  return parsed ? parsed.toString() : null;
+}
+
+/**
  * Quick regex check for z1 address format before SDK parsing.
  */
 export function isValidAddressFormat(address: string): boolean {

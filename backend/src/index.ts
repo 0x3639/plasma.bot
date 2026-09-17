@@ -5,6 +5,7 @@ import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { setupSecurity } from './middleware/security.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { initializeWallet } from './services/wallet.js';
+import { canonicalizeStoredAddresses } from './services/canonicalizeRecords.js';
 import { initializeZenon, clearZenonConnection } from './services/zenon.js';
 import { startBalanceMonitor, stopBalanceMonitor } from './cron/balanceMonitor.js';
 import { startReceiveMonitor, stopReceiveMonitor } from './cron/receiveMonitor.js';
@@ -48,6 +49,11 @@ async function startup(): Promise<void> {
 
   // 1. Connect to MongoDB
   await connectDatabase();
+
+  // 1b. Normalize stored addresses before serving anything. The previous
+  // container may have written non-canonical records after the deploy
+  // migration ran; failing closed here is deliberate (the process restarts).
+  await canonicalizeStoredAddresses();
 
   // 2. Initialize Zenon SDK connection
   await initializeZenon();
