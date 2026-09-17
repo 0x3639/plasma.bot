@@ -102,6 +102,16 @@ function createApp() {
   const app = express();
   setupSecurity(app);
   app.use('/api/agent/fuse', agentFuseRoutes);
+  // Fault-injection routes under the agent prefix so the error handler's
+  // remaining agent-envelope branches can be exercised end-to-end.
+  app.post('/api/agent/_parser-other', (_req, _res, next) => {
+    // A body-parser 4xx whose `type` has no specific mapping (e.g. the client
+    // aborted mid-body): must surface as BAD_REQUEST, not a 500.
+    next(Object.assign(new Error('request aborted'), { status: 400, type: 'request.aborted' }));
+  });
+  app.post('/api/agent/_boom', (_req, _res, next) => {
+    next(new Error('unexpected internal failure'));
+  });
   app.use(errorHandler);
   return app;
 }
@@ -186,6 +196,17 @@ describe('agent fuse API contract (OpenAPI <-> implementation)', () => {
     expect(mockSend).not.toHaveBeenCalled();
     const req = await FuseRequest.findOne({ beneficiary: addr });
     expect(req?.status).toBe('failed');
+  });
+
+  it('400 BAD_REQUEST for an unmapped body-parser 4xx', async () => {
+    const res = await request(createApp()).post('/api/agent/_parser-other').send({});
+    expect(await expectCode(res, 400)).toBe('BAD_REQUEST');
+  });
+
+  it('500 INTERNAL_ERROR for an unexpected error on the agent API', async () => {
+    const res = await request(createApp()).post('/api/agent/_boom').send({});
+    expect(await expectCode(res, 500)).toBe('INTERNAL_ERROR');
+    expect(res.body.error.message).not.toContain('unexpected internal failure');
   });
 
   it('415 UNSUPPORTED_MEDIA_TYPE', async () => {

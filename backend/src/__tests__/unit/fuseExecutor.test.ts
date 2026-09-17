@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FuseRequest } from '../../models/FuseRequest.js';
 import { Fusion } from '../../models/Fusion.js';
-import { executeFuse } from '../../services/fuseExecutor.js';
+import { executeFuse, _resetForTesting as _resetExecutorForTesting } from '../../services/fuseExecutor.js';
+import { logger } from '../../utils/logger.js';
 import { tryReserveQsr, getReservedQsr, _resetForTesting } from '../../services/balance.js';
 import { failStaleProcessingRequests } from '../../cron/reconcile.js';
 import { SendQueueFullError } from '../../services/sendQueue.js';
@@ -52,6 +53,7 @@ describe('executeFuse', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _resetForTesting();
+    _resetExecutorForTesting();
     mockSend.mockResolvedValue({ hash: { toString: () => 'tx-ok' } });
   });
   afterEach(() => {
@@ -111,6 +113,27 @@ describe('executeFuse', () => {
     const saved = await FuseRequest.findById(req._id);
     expect(saved?.status).toBe('failed');
     expect(saved?.errorMessage).toBe('Send queue full');
+  });
+
+  it('logs queue-full rejections once per 10s with a suppressed count', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(logger, 'warn');
+    mockSend.mockRejectedValue(new SendQueueFullError());
+
+    for (let i = 0; i < 5; i++) {
+      const req = await FuseRequest.create({ beneficiary: `${addr}${i}`, tier: 'low', ipAddress: '1.2.3.4', status: 'processing' });
+      await executeFuse(req, 'low', tryReserveQsr(20, 1000)!);
+    }
+    const queueFullLogs = () => warn.mock.calls.filter((c) => String(c[0]) === 'Fuse rejected: send queue full');
+    expect(queueFullLogs()).toHaveLength(1);
+
+    // Next interval: one more line carrying the four suppressed rejections.
+    await vi.advanceTimersByTimeAsync(10_000);
+    const req = await FuseRequest.create({ beneficiary: `${addr}x`, tier: 'low', ipAddress: '1.2.3.4', status: 'processing' });
+    await executeFuse(req, 'low', tryReserveQsr(20, 1000)!);
+    expect(queueFullLogs()).toHaveLength(2);
+    expect((queueFullLogs()[1] as unknown[])[1]).toMatchObject({ suppressedSinceLastLog: 4 });
+    warn.mockRestore();
   });
 
   it('holds the reservation across the window when the send fails', async () => {

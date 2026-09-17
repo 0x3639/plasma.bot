@@ -48,6 +48,18 @@ review loop was capped at four rounds, so these were handled as follows:
 | Low: public fuse traffic can fill the bounded send queue and starve receive/unfuse maintenance; `receiveAllPending` then refetches the same page up to 20 times, logging each failure; queue-full fuse rejections log individually. (A regression introduced by the round-1 queue bound.) | **Fixed on the branch, not re-reviewed by Codex.** `serializedSend` has a `priority` lane exempt from `MAX_QUEUE_DEPTH`, used by `receiveAllPending` and the unfuse cycle (both already bounded by their own cycles). `receiveAllPending` stops its cycle on `SendQueueFullError` instead of refetching. Queue-full fuse rejections log one line per 10s with a suppressed count. Tests: priority job admitted when the queue is full; receive cycle fetches once and stops; a never-settling `beforeSend` times out after 5s and the next job proceeds. |
 | Medium (code review): the deployed `Caddyfile` enforces `request_body max_size 1KB` ahead of `reverse_proxy`, so an oversized agent request gets Caddy's plain 413 instead of the documented `PAYLOAD_TOO_LARGE` envelope. | **Deferred to a separate ingress review** — see "Deferred: Caddy ingress" below. |
 
+## Round 5 — Codex verdict: APPROVE WITH NITS
+
+Codex re-reviewed `328e0b2...0f876ba` with the Caddy item excluded: no reportable security findings, no
+blocking defects, and every item from the original audit and rounds 1–4 confirmed closed. Three optional
+nits were applied afterwards:
+
+| Nit | Fix |
+|-----|-----|
+| Queue-drain comment overstated the availability guarantee (pre-queue latency excluded). | Comment now states the bound covers time in the queue only and that a rare `REQUEST_EXPIRED` remains possible and safe. |
+| Contract suite lacked end-to-end `BAD_REQUEST` and `INTERNAL_ERROR`. | Fault-injection routes under `/api/agent/` exercise both through the production error handler. |
+| Missing focused tests for queue-full log throttling and unfuse priority/rollback. | `fuseExecutor.test.ts` asserts one warning per 10s with the suppressed count; new `unfuse.test.ts` asserts `{ priority: true }` and rollback to `active` after a failed cancel. |
+
 ## Deferred: Caddy ingress (out of scope for this branch)
 
 **Decision (2026-09-17):** the Caddy 413 contract gap is intentionally NOT addressed on this branch. It

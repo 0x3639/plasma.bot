@@ -21,10 +21,13 @@ const BEFORE_SEND_TIMEOUT_MS = 5_000;
  * reservation. The bound is sized against the WORST-case per-job cost
  * (BEFORE_SEND_TIMEOUT_MS + SEND_TIMEOUT_MS + INTER_TX_DELAY_MS = 37s) so that
  * even a queue full of timing-out jobs drains inside the 10-minute processing
- * lease (15 x 37s = 9.25 min): a job that is admitted always reaches its send
- * slot with its lease still valid, and callers beyond the bound get a fast
- * "busy" rejection instead of holding resources they can never use. In normal
- * operation a job costs ~3s, so the bound represents well under a minute.
+ * lease (15 x 37s = 9.25 min). This bounds the time a job spends IN the queue;
+ * a request's lease clock also includes the pre-queue work (DB checks, balance
+ * read) done before admission, so a job can still, rarely, find its lease
+ * swept and return REQUEST_EXPIRED — the pre-send revalidation is what keeps
+ * that safe. Callers beyond the bound get a fast "busy" rejection instead of
+ * holding resources they can never use. In normal operation a job costs ~3s,
+ * so the bound represents well under a minute.
  */
 export const MAX_QUEUE_DEPTH = 15;
 
