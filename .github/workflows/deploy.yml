@@ -91,6 +91,7 @@ jobs:
             echo "==> Running database migrations..."
             docker compose run --rm -T backend node backend/scripts/migrate-indexes.mjs
             docker compose run --rm -T backend node backend/scripts/add-telegram-fields.mjs
+            docker compose run --rm -T backend node backend/scripts/canonicalize-addresses.mjs
 
             echo "==> Starting all services..."
             docker compose up -d

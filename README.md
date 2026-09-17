@@ -127,7 +127,7 @@ curl -X POST https://plazma.bot/api/agent/fuse \
 {"success": true, "txHash": "...", "address": "z1q...", "tier": "low", "amount": 20}
 ```
 
-**Error codes**: `VALIDATION_FAILED` (400), `RATE_LIMITED` (429), `ADDRESS_UNAVAILABLE` (429), `INSUFFICIENT_BALANCE` (503), `FUSE_FAILED` (500). All errors include `success: false` and a structured `error` object with `code` and `message`.
+**Error codes**: `VALIDATION_FAILED` (400), `RATE_LIMITED` (429), `ADDRESS_UNAVAILABLE` (429), `GLOBAL_LIMIT_REACHED` (429), `INSUFFICIENT_BALANCE` (503), `SERVICE_BUSY` (503), `REQUEST_EXPIRED` (503), `FUSE_FAILED` (500). All errors include `success: false` and a structured `error` object with `code` and `message`.
 
 Rate limited separately from web traffic (default 10 requests per IP per 24 hours). See [ROADMAP.md](ROADMAP.md) for planned enhancements including 402 agentic payments and MCP server integration.
 

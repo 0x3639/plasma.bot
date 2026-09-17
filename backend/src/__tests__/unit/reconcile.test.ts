@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Fusion } from '../../models/Fusion.js';
 import { FuseRequest } from '../../models/FuseRequest.js';
 import { reconcileFusionIds, failStaleProcessingRequests } from '../../cron/reconcile.js';
+import { assertFuseLeaseHeld, FuseLeaseLostError } from '../../services/fuseLease.js';
 import { createMockAddress, createMockFusionEntry } from '../setup/mocks.js';
 
 // Mock zenon and wallet
@@ -267,11 +268,12 @@ describe('failStaleProcessingRequests', () => {
       ipAddress: '1.2.3.4',
       status: 'processing',
     });
-    // Backdate past the 10-minute grace window (createdAt is set by Mongoose
-    // timestamps, so update it directly).
+    // Backdate past the 10-minute grace window (timestamps are set by
+    // Mongoose, so update them directly).
+    const old = new Date(Date.now() - 11 * 60 * 1000);
     await FuseRequest.collection.updateOne(
       { _id: stale._id },
-      { $set: { createdAt: new Date(Date.now() - 11 * 60 * 1000) } },
+      { $set: { createdAt: old, updatedAt: old } },
     );
 
     await failStaleProcessingRequests();
@@ -279,6 +281,48 @@ describe('failStaleProcessingRequests', () => {
     const updated = await FuseRequest.findById(stale._id);
     expect(updated?.status).toBe('failed');
     expect(updated?.errorMessage).toContain('Stale processing');
+  });
+
+  it('does not release a lease that was refreshed before signing', async () => {
+    const queued = await FuseRequest.create({
+      beneficiary: 'z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0',
+      tier: 'low',
+      ipAddress: '1.2.3.4',
+      status: 'processing',
+    });
+    const old = new Date(Date.now() - 11 * 60 * 1000);
+    await FuseRequest.collection.updateOne(
+      { _id: queued._id },
+      { $set: { createdAt: old, updatedAt: old } },
+    );
+
+    // The job reached the front of the send queue and is about to sign.
+    await assertFuseLeaseHeld(queued);
+
+    await failStaleProcessingRequests();
+
+    const updated = await FuseRequest.findById(queued._id);
+    expect(updated?.status).toBe('processing');
+  });
+
+  it('a swept lease cannot be reacquired by the original handler', async () => {
+    const stale = await FuseRequest.create({
+      beneficiary: 'z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0',
+      tier: 'low',
+      ipAddress: '1.2.3.4',
+      status: 'processing',
+    });
+    const old = new Date(Date.now() - 11 * 60 * 1000);
+    await FuseRequest.collection.updateOne(
+      { _id: stale._id },
+      { $set: { createdAt: old, updatedAt: old } },
+    );
+
+    await failStaleProcessingRequests();
+
+    // The handler that owned this record is still alive and now reaches its
+    // queue slot; it must not sign.
+    await expect(assertFuseLeaseHeld(stale)).rejects.toBeInstanceOf(FuseLeaseLostError);
   });
 
   it('leaves fresh in-flight processing requests alone', async () => {

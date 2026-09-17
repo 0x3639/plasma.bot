@@ -10,9 +10,11 @@ import { logger } from '../utils/logger.js';
 const STALE_PENDING_MS = 10 * 60 * 1000; // 10 minutes
 
 // Grace period before an in-flight 'processing' FuseRequest is considered
-// abandoned. A healthy request finishes in well under a minute (send timeout is
-// 30s); anything older means the handler died (crash, unhandled error) without
-// transitioning the record.
+// abandoned. Measured from the record's last lease activity (`updatedAt`): a
+// handler refreshes the lease right before signing (assertFuseLeaseHeld), so a
+// record with no activity for this long means the handler died (crash,
+// unhandled error) or has been waiting in the send queue longer than we are
+// willing to hold its address lock and global-cap slot.
 const STALE_PROCESSING_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
@@ -22,11 +24,17 @@ const STALE_PROCESSING_MS = 10 * 60 * 1000; // 10 minutes
  * index) and occupies a global-cap slot, so a record stranded by a crash or an
  * unhandled error would otherwise block its address until the 90-day TTL.
  * This sweeper makes that lock self-healing.
+ *
+ * Releasing a lease is only safe because a still-live handler revalidates its
+ * lease inside the send-queue slot before signing (see services/fuseLease.ts):
+ * a job whose lease was released here never sends, so the freed slot cannot be
+ * double-spent by a later-admitted request. The lease refresh also bumps
+ * `updatedAt`, so a job that is actually mid-send is never released.
  */
 export async function failStaleProcessingRequests(): Promise<void> {
   const cutoff = new Date(Date.now() - STALE_PROCESSING_MS);
   const result = await FuseRequest.updateMany(
-    { status: 'processing', createdAt: { $lt: cutoff } },
+    { status: 'processing', updatedAt: { $lt: cutoff } },
     { $set: { status: 'failed', errorMessage: 'Stale processing request (handler never completed)' } },
   );
 

@@ -1,14 +1,14 @@
 import type { Context } from 'telegraf';
-import { Address } from 'znn-typescript-sdk';
 import { CONFIG, type FuseTier } from '../config/index.js';
-import { fuseToAddress } from '../services/plasma.js';
-import { getQsrBalance, tryReserveQsr, scheduleReleaseQsr } from '../services/balance.js';
+import { getQsrBalance, tryReserveQsr } from '../services/balance.js';
+import { executeFuse, type FuseOutcome } from '../services/fuseExecutor.js';
 import { getNextUnfuseTime } from '../services/unfuse.js';
 import { getWalletAddress } from '../services/wallet.js';
 import { checkAddressAvailability, isGlobalDailyCapReached, confirmGlobalCapSlot } from '../middleware/rateLimiter.js';
-import { checkTelegramUserRateLimit } from './rateLimiter.js';
+import { checkTelegramUserRateLimit, confirmTelegramUserSlot } from './rateLimiter.js';
 import { Fusion } from '../models/Fusion.js';
 import { FuseRequest } from '../models/FuseRequest.js';
+import { canonicalizeAddress } from '../utils/address.js';
 import { logger } from '../utils/logger.js';
 import {
   formatHelp,
@@ -25,14 +25,46 @@ const AMOUNT_TO_TIER: Record<number, FuseTier> = {
   120: 'high',
 };
 
-function reply(ctx: Context, text: string): Promise<unknown> {
-  return ctx.reply(text, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+/**
+ * Best-effort notification. Telegram can refuse delivery at any time (the user
+ * blocked the bot, the chat was deleted, the API is rate limiting us). A
+ * failed reply must never change transaction state or escape the handler —
+ * an escaped rejection reaches Telegraf's update-error path, and every reply
+ * here is purely informational.
+ */
+function reply(ctx: Context, text: string): Promise<void> {
+  return ctx
+    .reply(text, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } })
+    .then(() => undefined)
+    .catch((error: unknown) => {
+      logger.warn('Telegram reply failed', {
+        error,
+        chatId: ctx.chat?.id,
+        telegramUserId: ctx.from?.id,
+      });
+    });
 }
 
 /**
  * Handle the /fuse command with all subcommands.
+ *
+ * Never rejects: this is the error boundary for one update, so one user's
+ * failure cannot take down the shared polling loop.
  */
 export async function handleFuseCommand(ctx: Context): Promise<void> {
+  try {
+    await dispatchFuseCommand(ctx);
+  } catch (error) {
+    logger.error('Telegram command handler failed', {
+      error,
+      telegramUserId: ctx.from?.id,
+      chatId: ctx.chat?.id,
+    });
+    await reply(ctx, formatError('Something went wrong. Please try again later.'));
+  }
+}
+
+async function dispatchFuseCommand(ctx: Context): Promise<void> {
   const text = (ctx.message && 'text' in ctx.message ? ctx.message.text : '') || '';
   const args = text.replace(/^\/fuse(@\S+)?/, '').trim().split(/\s+/).filter(Boolean);
 
@@ -87,13 +119,12 @@ async function handleHealth(ctx: Context): Promise<void> {
   }
 }
 
-async function handleStatus(ctx: Context, address?: string): Promise<void> {
+async function handleStatus(ctx: Context, rawAddress?: string): Promise<void> {
   try {
-    if (address) {
-      // Validate address format
-      try {
-        Address.parse(address);
-      } catch {
+    if (rawAddress) {
+      // Canonical form so an uppercase encoding finds the same records.
+      const address = canonicalizeAddress(rawAddress);
+      if (!address) {
         await reply(ctx, formatError('Invalid Zenon address.'));
         return;
       }
@@ -120,11 +151,22 @@ async function handleStatus(ctx: Context, address?: string): Promise<void> {
   }
 }
 
+function describeFailure(outcome: Extract<FuseOutcome, { ok: false }>): string {
+  switch (outcome.code) {
+    case 'QUEUE_FULL':
+      return 'The fuse service is busy right now. Please try again in a few minutes.';
+    case 'LEASE_LOST':
+      return 'Your request waited too long and expired before it could be sent. Please try again.';
+    case 'FUSE_FAILED':
+      return 'Failed to fuse plasma. Please try again later.';
+  }
+}
+
 async function handleFuse(
   ctx: Context,
   tier: FuseTier,
   amount: number,
-  addressStr: string,
+  rawAddress: string,
 ): Promise<void> {
   const telegramUserId = ctx.from?.id;
   if (!telegramUserId) {
@@ -132,15 +174,17 @@ async function handleFuse(
     return;
   }
 
-  // Validate address
-  try {
-    Address.parse(addressStr);
-  } catch {
+  // Validate and canonicalize. Bech32 accepts an all-uppercase encoding of the
+  // same address; every check, lock and record below must use the canonical
+  // (lowercase) form so `Z1...` cannot bypass the one-fusion-per-address rule
+  // for an existing `z1...` fusion.
+  const address = canonicalizeAddress(rawAddress);
+  if (!address) {
     await reply(ctx, formatError('Invalid Zenon address.'));
     return;
   }
 
-  // Check per-user rate limit
+  // Check per-user rate limit (read-only pre-check; confirmed atomically below)
   const userLimit = await checkTelegramUserRateLimit(telegramUserId);
   if (!userLimit.allowed) {
     await reply(ctx, formatRateLimited(userLimit.remaining, CONFIG.TELEGRAM_RATE_LIMIT_PER_USER_MAX));
@@ -162,7 +206,7 @@ async function handleFuse(
   }
 
   // Check per-address availability
-  const addressCheck = await checkAddressAvailability(addressStr);
+  const addressCheck = await checkAddressAvailability(address);
   if (!addressCheck.allowed) {
     await reply(ctx, formatError(addressCheck.reason!));
     return;
@@ -174,7 +218,7 @@ async function handleFuse(
   let fuseRequest;
   try {
     fuseRequest = await FuseRequest.create({
-      beneficiary: addressStr,
+      beneficiary: address,
       tier,
       ipAddress: 'telegram',
       source: 'telegram',
@@ -186,7 +230,7 @@ async function handleFuse(
       await reply(ctx, formatError('A fusion request for this address is already being processed.'));
       return;
     }
-    logger.error('Failed to create telegram fuse request record', { error, address: addressStr });
+    logger.error('Failed to create telegram fuse request record', { error, address });
     await reply(ctx, formatError('Service temporarily unavailable. Please try again later.'));
     return;
   }
@@ -197,8 +241,13 @@ async function handleFuse(
   // sweeper clears it.
   let balance: number;
   try {
-    // Atomic re-check of the global cap now that our 'processing' record
-    // exists; the pre-check above is racy under a concurrent burst.
+    // Atomic re-checks now that our 'processing' record exists; both
+    // pre-checks above are read-only and racy under a concurrent burst.
+    if (!(await confirmTelegramUserSlot(fuseRequest))) {
+      await reply(ctx, formatRateLimited(0, CONFIG.TELEGRAM_RATE_LIMIT_PER_USER_MAX));
+      return;
+    }
+
     if (!(await confirmGlobalCapSlot(fuseRequest))) {
       await reply(ctx, formatError('The fuse service has reached its daily limit. Please try again later.'));
       return;
@@ -206,7 +255,7 @@ async function handleFuse(
 
     balance = await getQsrBalance();
   } catch (error) {
-    logger.error('Telegram fuse pre-checks failed', { error, address: addressStr });
+    logger.error('Telegram fuse pre-checks failed', { error, address });
     fuseRequest.status = 'failed';
     fuseRequest.errorMessage = 'Pre-check failed (node or DB unavailable)';
     await fuseRequest.save().catch(() => undefined); // sweeper cleans up if this also fails
@@ -215,7 +264,8 @@ async function handleFuse(
   }
 
   // Atomic check + reserve
-  if (!tryReserveQsr(amount, balance)) {
+  const reservation = tryReserveQsr(amount, balance);
+  if (!reservation) {
     fuseRequest.status = 'failed';
     fuseRequest.errorMessage = 'Insufficient QSR balance for this tier';
     await fuseRequest.save();
@@ -239,36 +289,21 @@ async function handleFuse(
     return;
   }
 
-  try {
-    const fusion = await fuseToAddress(addressStr, tier);
+  // The transaction outcome is settled (record state + reservation) before any
+  // notification is attempted, so a failed reply cannot roll back a completed
+  // fuse or release the reservation a second time.
+  const outcome = await executeFuse(fuseRequest, tier, reservation);
 
-    fuseRequest.status = 'completed';
-    fuseRequest.fusion = fusion._id;
-    await fuseRequest.save();
-
-    // Hold the reservation across the chain-confirmation window, then release.
-    scheduleReleaseQsr(amount);
-
+  if (outcome.ok) {
     logger.info('Telegram fuse completed', {
       telegramUserId,
-      address: addressStr,
+      address,
       tier,
-      txHash: fusion.txHash,
+      txHash: outcome.fusion.txHash,
     });
-
-    await reply(ctx, formatFuseSuccess(addressStr, tier, amount, fusion.txHash));
-  } catch (error) {
-    logger.error('Telegram fuse failed', { error, telegramUserId, address: addressStr, tier });
-
-    fuseRequest.status = 'failed';
-    fuseRequest.errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    await fuseRequest.save().catch(() => undefined);
-
-    // A send "failure" can be a timeout on a block that still lands in a
-    // momentum seconds later, so hold the reservation across the confirmation
-    // window instead of releasing it against a stale balance.
-    scheduleReleaseQsr(amount);
-
-    await reply(ctx, formatError('Failed to fuse plasma. Please try again later.'));
+    await reply(ctx, formatFuseSuccess(address, tier, amount, outcome.fusion.txHash));
+    return;
   }
+
+  await reply(ctx, formatError(describeFailure(outcome)));
 }

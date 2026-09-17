@@ -190,6 +190,49 @@ describe('Route Integration Tests', () => {
   });
 
   // --- Fusions by address ---
+  describe('GET /api/fusions pagination hardening', () => {
+    it('rejects a huge page number with 400 instead of hanging', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/fusions?page=1e308&limit=100');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Invalid pagination');
+    });
+
+    it('rejects a page beyond MAX_PAGE_NUMBER', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/fusions?page=10001');
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a huge page on the per-address route', async () => {
+      const app = createApp();
+      const res = await request(app).get(`/api/fusions/z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0?page=99999999999999999999`);
+      expect(res.status).toBe(400);
+    });
+
+    it('answers with the generic 500 when the database query rejects', async () => {
+      const spy = vi.spyOn(Fusion, 'countDocuments').mockImplementationOnce(() => {
+        throw new Error('db down');
+      });
+      const app = createApp();
+      const res = await request(app).get('/api/fusions');
+      expect(res.status).toBe(500);
+      expect(res.body.error).toBeDefined();
+      expect(res.body.error).not.toContain('db down');
+      spy.mockRestore();
+    });
+
+    it('answers with the generic 500 when the per-address query rejects', async () => {
+      const spy = vi.spyOn(Fusion, 'countDocuments').mockImplementationOnce(() => {
+        throw new Error('db down');
+      });
+      const app = createApp();
+      const res = await request(app).get(`/api/fusions/z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0`);
+      expect(res.status).toBe(500);
+      spy.mockRestore();
+    });
+  });
+
   describe('GET /api/fusions/:address', () => {
     it('returns fusions for a specific address', async () => {
       const addr = 'z1qrjdhy65zds69a96xlhheu4sy689k34x4hpse0';

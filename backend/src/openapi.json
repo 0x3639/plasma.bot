@@ -69,11 +69,14 @@
             }
           },
           "503": {
-            "description": "Insufficient QSR balance",
+            "description": "Insufficient QSR balance, service busy, request expired while queued, or service unavailable",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InsufficientBalanceError"
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/InsufficientBalanceError" },
+                    { "$ref": "#/components/schemas/ServiceError" }
+                  ]
                 }
               }
             }
@@ -260,6 +263,19 @@
               "available": { "type": "number" },
               "needed": { "type": "number" },
               "nextUnfuseAt": { "type": "string", "nullable": true, "format": "date-time" }
+            }
+          }
+        }
+      },
+      "ServiceError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["SERVICE_BUSY", "REQUEST_EXPIRED", "SERVICE_UNAVAILABLE"] },
+              "message": { "type": "string" }
             }
           }
         }

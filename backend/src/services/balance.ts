@@ -19,20 +19,50 @@ export function releaseQsr(amount: number): void {
 }
 
 /**
- * Release a reservation only after the chain has had time to reflect the spend.
- *
- * `zenon.send()` resolving means the fuse block was published, NOT that the
- * wallet's on-chain QSR balance has dropped — that happens once the block is
- * produced into a momentum (seconds later). Releasing synchronously on send
- * completion opens a window where a concurrent request reads the stale
- * (pre-debit) balance with the reservation already gone, and over-spends.
- * Holding the reservation for RESERVATION_HOLD_MS closes that window.
- *
- * The timer is unref'd so it never keeps the process (or a test runner) alive.
+ * An owned reservation. Each reservation can be released exactly once —
+ * calling `release()` or `scheduleRelease()` a second time is a no-op — so a
+ * handler that hits two exit paths (e.g. a successful fuse followed by a
+ * failed notification) cannot decrement the shared counter twice and eat
+ * into another request's reservation.
  */
-export function scheduleReleaseQsr(amount: number, delayMs = CONFIG.RESERVATION_HOLD_MS): void {
-  const timer = setTimeout(() => releaseQsr(amount), delayMs);
-  if (typeof timer.unref === 'function') timer.unref();
+export interface QsrReservation {
+  readonly amount: number;
+  /** True once this reservation has been released or a release is scheduled. */
+  readonly settled: boolean;
+  /** Release immediately. Use only when nothing was sent to the chain. */
+  release(): void;
+  /**
+   * Release after the chain-confirmation hold.
+   *
+   * `zenon.send()` resolving means the fuse block was published, NOT that the
+   * wallet's on-chain QSR balance has dropped — that happens once the block is
+   * produced into a momentum (seconds later). Releasing synchronously on send
+   * completion opens a window where a concurrent request reads the stale
+   * (pre-debit) balance with the reservation already gone, and over-spends.
+   * Holding the reservation for RESERVATION_HOLD_MS closes that window.
+   *
+   * The timer is unref'd so it never keeps the process (or a test runner) alive.
+   */
+  scheduleRelease(delayMs?: number): void;
+}
+
+class Reservation implements QsrReservation {
+  settled = false;
+
+  constructor(readonly amount: number) {}
+
+  release(): void {
+    if (this.settled) return;
+    this.settled = true;
+    releaseQsr(this.amount);
+  }
+
+  scheduleRelease(delayMs = CONFIG.RESERVATION_HOLD_MS): void {
+    if (this.settled) return;
+    this.settled = true;
+    const timer = setTimeout(() => releaseQsr(this.amount), delayMs);
+    if (typeof timer.unref === 'function') timer.unref();
+  }
 }
 
 export function getReservedQsr(): number {
@@ -46,12 +76,12 @@ export function getReservedQsr(): number {
  *
  * @param amount QSR to reserve (human-readable units)
  * @param currentBalance Live balance from chain (already fetched via async call)
- * @returns true if reserved successfully, false if insufficient balance
+ * @returns the owned reservation, or null if the balance is insufficient
  */
-export function tryReserveQsr(amount: number, currentBalance: number): boolean {
-  if ((currentBalance - reservedQsr) < amount) return false;
+export function tryReserveQsr(amount: number, currentBalance: number): QsrReservation | null {
+  if ((currentBalance - reservedQsr) < amount) return null;
   reservedQsr += amount;
-  return true;
+  return new Reservation(amount);
 }
 
 /**

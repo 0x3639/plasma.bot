@@ -8,7 +8,7 @@ vi.mock('../../services/zenon.js', () => ({
   }),
 }));
 
-import { serializedSend } from '../../services/sendQueue.js';
+import { serializedSend, getSendQueueDepth, MAX_QUEUE_DEPTH, SendQueueFullError } from '../../services/sendQueue.js';
 
 describe('serializedSend', () => {
   const mockBlock = { blockType: 1 } as any;
@@ -80,5 +80,58 @@ describe('serializedSend', () => {
     await vi.advanceTimersByTimeAsync(31_000);
 
     await expect(promise).rejects.toThrow('Send timeout after 30000ms');
+  });
+
+  describe('beforeSend hook', () => {
+    it('runs inside the queue slot before zenon.send', async () => {
+      const order: string[] = [];
+      mockSend.mockImplementationOnce(async () => { order.push('send'); return { hash: 'tx' }; });
+
+      const promise = serializedSend(mockBlock, mockKeyPair, {
+        beforeSend: async () => { order.push('before'); },
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      await promise;
+
+      expect(order).toEqual(['before', 'send']);
+    });
+
+    it('skips the send and rejects when the hook throws, without poisoning the queue', async () => {
+      mockSend.mockResolvedValue({ hash: 'tx' });
+
+      const first = serializedSend(mockBlock, mockKeyPair, {
+        beforeSend: async () => { throw new Error('lease lost'); },
+      });
+      const second = serializedSend(mockBlock, mockKeyPair);
+      const firstAssertion = expect(first).rejects.toThrow('lease lost');
+
+      await vi.advanceTimersByTimeAsync(3000);
+      await firstAssertion;
+      await second;
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('queue depth bound', () => {
+    it('rejects immediately once MAX_QUEUE_DEPTH jobs are waiting, then recovers', async () => {
+      mockSend.mockResolvedValue({ hash: 'tx' });
+      const queued: Promise<unknown>[] = [];
+      for (let i = 0; i < MAX_QUEUE_DEPTH; i++) {
+        queued.push(serializedSend(mockBlock, mockKeyPair));
+      }
+      expect(getSendQueueDepth()).toBe(MAX_QUEUE_DEPTH);
+
+      await expect(serializedSend(mockBlock, mockKeyPair)).rejects.toBeInstanceOf(SendQueueFullError);
+
+      // Drain the queue (each job costs the inter-tx delay).
+      await vi.advanceTimersByTimeAsync(3000 * MAX_QUEUE_DEPTH);
+      await Promise.all(queued);
+      expect(getSendQueueDepth()).toBe(0);
+
+      const after = serializedSend(mockBlock, mockKeyPair);
+      await vi.advanceTimersByTimeAsync(3000);
+      await expect(after).resolves.toEqual({ hash: 'tx' });
+    });
   });
 });
