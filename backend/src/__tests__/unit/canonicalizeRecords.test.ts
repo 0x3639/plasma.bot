@@ -43,8 +43,8 @@ describe('canonicalizeStoredAddresses', () => {
     await canonicalizeStoredAddresses();
 
     expect(await FuseRequest.countDocuments({ beneficiary: lower, status: 'processing' })).toBe(1);
-    const superseded = await FuseRequest.findOne({ beneficiary: upper });
-    expect(superseded?.status).toBe('failed');
+    expect(await FuseRequest.countDocuments({ beneficiary: upper })).toBe(0);
+    const superseded = await FuseRequest.findOne({ beneficiary: lower, status: 'failed' });
     expect(superseded?.errorMessage).toContain('duplicate processing lock');
   });
 

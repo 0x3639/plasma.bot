@@ -58,15 +58,88 @@ function reply(ctx: Context, text: string): Promise<void> {
  */
 export const MAX_IN_FLIGHT_COMMANDS = 16;
 
+/**
+ * Bound on overload/duplicate rejection replies in flight. A rejection reply
+ * is itself a network operation, so without its own bound a flood of updates
+ * could pile up arbitrarily many pending replies (and retained contexts) while
+ * the command slots stay full. Rejections beyond this bound, and repeat
+ * rejections to a user who already has one pending, are dropped silently.
+ */
+export const MAX_IN_FLIGHT_REJECTION_REPLIES = 8;
+// Rejection logging is throttled to one line per this interval so a flood
+// cannot turn the log into the amplifier.
+const REJECTION_LOG_INTERVAL_MS = 10_000;
+
 let inFlightCommands = 0;
 // One in-flight command per Telegram user: a burst from one account is
 // rejected up front instead of racing through the pre-checks in parallel
 // (confirmTelegramUserSlot remains the durable, DB-level guarantee).
 const inFlightUsers = new Set<number>();
 
+let inFlightRejectionReplies = 0;
+const usersWithPendingRejection = new Set<number>();
+let droppedRejections = 0;
+let lastRejectionLogAt = 0;
+
 /** @internal Snapshot for tests. */
-export function _getInFlightForTesting(): { commands: number; users: number } {
-  return { commands: inFlightCommands, users: inFlightUsers.size };
+export function _getInFlightForTesting(): {
+  commands: number;
+  users: number;
+  rejectionReplies: number;
+  droppedRejections: number;
+} {
+  return {
+    commands: inFlightCommands,
+    users: inFlightUsers.size,
+    rejectionReplies: inFlightRejectionReplies,
+    droppedRejections,
+  };
+}
+
+/** @internal Reset counters for tests. */
+export function _resetForTesting(): void {
+  droppedRejections = 0;
+  lastRejectionLogAt = 0;
+}
+
+function logRejectionThrottled(reason: string, telegramUserId: number | undefined): void {
+  const now = Date.now();
+  if (now - lastRejectionLogAt < REJECTION_LOG_INTERVAL_MS) return;
+  lastRejectionLogAt = now;
+  logger.warn('Telegram command rejected', {
+    reason,
+    telegramUserId,
+    inFlightCommands,
+    inFlightRejectionReplies,
+    droppedRejectionsSinceLastLog: droppedRejections,
+  });
+  droppedRejections = 0;
+}
+
+/**
+ * Bounded, coalesced rejection reply: at most one pending per user and at
+ * most MAX_IN_FLIGHT_REJECTION_REPLIES overall; anything beyond is dropped.
+ */
+async function rejectCommand(ctx: Context, reason: string, text: string): Promise<void> {
+  const telegramUserId = ctx.from?.id;
+  logRejectionThrottled(reason, telegramUserId);
+
+  if (
+    inFlightRejectionReplies >= MAX_IN_FLIGHT_REJECTION_REPLIES ||
+    (telegramUserId !== undefined && usersWithPendingRejection.has(telegramUserId))
+  ) {
+    droppedRejections++;
+    return;
+  }
+
+  inFlightRejectionReplies++;
+  if (telegramUserId !== undefined) usersWithPendingRejection.add(telegramUserId);
+  try {
+    await reply(ctx, formatError(text));
+  } finally {
+    inFlightRejectionReplies--;
+    if (telegramUserId !== undefined) usersWithPendingRejection.delete(telegramUserId);
+  }
 }
 
 /**
@@ -79,16 +152,12 @@ export async function handleFuseCommand(ctx: Context): Promise<void> {
   const telegramUserId = ctx.from?.id;
 
   if (inFlightCommands >= MAX_IN_FLIGHT_COMMANDS) {
-    logger.warn('Telegram command rejected: too many in flight', {
-      inFlight: inFlightCommands,
-      telegramUserId,
-    });
-    await reply(ctx, formatError('The bot is busy right now. Please try again in a moment.'));
+    await rejectCommand(ctx, 'too many in flight', 'The bot is busy right now. Please try again in a moment.');
     return;
   }
 
   if (telegramUserId !== undefined && inFlightUsers.has(telegramUserId)) {
-    await reply(ctx, formatError('You already have a command in progress. Please wait for it to finish.'));
+    await rejectCommand(ctx, 'user command in progress', 'You already have a command in progress. Please wait for it to finish.');
     return;
   }
 

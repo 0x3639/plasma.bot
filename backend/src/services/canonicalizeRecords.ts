@@ -18,8 +18,9 @@ interface CollectionResult {
  * check uses. A colliding active/pending Fusion is a real second on-chain
  * fusion (own fusionId, unfused independently) and is kept; a 'processing'
  * FuseRequest that would collide with another live lock for the canonical
- * address is marked 'failed' — the unique partial index forbids two, and the
- * record is a stale artefact of the old behaviour.
+ * address is marked 'failed' (the unique partial index forbids two live locks
+ * and the record is a stale artefact of the old behaviour) and lowercased in
+ * the same write, since the index no longer applies to a failed record.
  */
 async function canonicalizeCollection(
   collection: typeof FuseRequest.collection | typeof Fusion.collection,
@@ -40,7 +41,7 @@ async function canonicalizeCollection(
       if (code === 11000 && doc.status === 'processing') {
         await collection.updateOne(
           { _id: doc._id },
-          { $set: { status: 'failed', errorMessage: 'Superseded duplicate processing lock (address canonicalization)' } },
+          { $set: { beneficiary: canonical, status: 'failed', errorMessage: 'Superseded duplicate processing lock (address canonicalization)' } },
         );
         result.failedDuplicateLocks++;
       } else {

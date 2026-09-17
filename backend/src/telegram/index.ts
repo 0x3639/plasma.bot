@@ -12,11 +12,6 @@ const RESTART_BACKOFF_MAX_MS = 60_000;
 // A polling run that lasted at least this long before ending is considered to
 // have been healthy; the next restart starts from the minimum backoff again.
 const HEALTHY_RUN_MS = 5 * 60 * 1000;
-// How long, and how often, to keep trying to stop an abandoned instance whose
-// polling object does not exist yet (see abandonInstance).
-const ABANDON_STOP_RETRY_MS = 100;
-const ABANDON_STOP_MAX_MS = 5 * 60 * 1000;
-
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);
@@ -84,7 +79,7 @@ export function createBot(token: string = CONFIG.TELEGRAM_BOT_TOKEN): Telegraf {
 
 interface Launch {
   instance: Telegraf;
-  /** Resolves once getMe succeeded and polling is about to begin. */
+  /** Resolves once the instance has issued its first getUpdates call. */
   started: Promise<void>;
   /** Settles when the polling loop exits (normally after stop, or with its error). */
   ended: Promise<void>;
@@ -92,55 +87,55 @@ interface Launch {
 
 /**
  * Give up on an instance we no longer track (its launch timed out or failed
- * before `started`). If `getMe()` is merely slow, Telegraf will still go on to
- * start polling on this instance later; an abandoned instance must therefore
- * be stopped as soon as it is stoppable so it can never become an untracked
- * second poller. `Telegraf.stop()` throws until its polling object exists
- * (which happens shortly after `onLaunch` fires), so we retry briefly.
+ * before it started polling, or the bot was stopped while it was launching).
+ *
+ * `launch()` may still be mid-flight (a slow `getMe`/`deleteWebhook`) and will
+ * go on to start polling later, so an abandoned instance must be stopped the
+ * moment it actually starts polling or it would become an untracked second
+ * poller. `started` is derived from the instance's first `getUpdates` call
+ * (see launchPolling), at which point Telegraf's polling object exists and
+ * `stop()` is guaranteed to work; if the launch instead ends before that
+ * (rejected `getMe`, bad token) there is nothing to stop.
  */
 function abandonInstance(launch: Launch, reason: string): void {
-  const stopUntilRunning = (): void => {
-    const deadline = Date.now() + ABANDON_STOP_MAX_MS;
-    const tick = (): void => {
+  let settled = false;
+  launch.ended.finally(() => { settled = true; }).catch(() => undefined);
+
+  launch.started
+    .then(() => {
+      if (settled) return;
       try {
         launch.instance.stop(reason);
         logger.info('Abandoned Telegram instance stopped', { reason });
-        return;
-      } catch {
-        // Not running yet.
+      } catch (error) {
+        logger.error('Could not stop abandoned Telegram instance', { reason, error });
       }
-      if (Date.now() < deadline) {
-        const timer = setTimeout(tick, ABANDON_STOP_RETRY_MS);
-        if (typeof timer.unref === 'function') timer.unref();
-      } else {
-        logger.error('Could not stop abandoned Telegram instance', { reason });
-      }
-    };
-    tick();
-  };
-
-  // If polling never starts, `started` never fires and there is nothing to
-  // stop; once it does, stop it.
-  launch.started.then(stopUntilRunning).catch(() => undefined);
-  // Also try right away in case it is already running.
-  try {
-    launch.instance.stop(reason);
-  } catch {
-    // Not running yet; the `started` hook above covers it.
-  }
+    })
+    .catch(() => undefined);
 }
 
 /**
  * Launch long polling.
  *
  * `bot.launch()` in polling mode resolves only when polling ENDS (it awaits the
- * loop), so it cannot be awaited for "started". The `onLaunch` callback fires
- * once `getMe` succeeds and polling is about to begin.
+ * loop), so it cannot be awaited for "started". Telegraf's `onLaunch` callback
+ * is no better: it fires after `getMe` but BEFORE `deleteWebhook` and
+ * `startPolling`, so nothing is pollable (or stoppable) yet. Actual readiness
+ * is the first `getUpdates` request, observed through the public
+ * `telegram.callApi` entry point every request goes through.
  */
 function launchPolling(instance: Telegraf, dropPendingUpdates: boolean): Launch {
   let markStarted!: () => void;
   const started = new Promise<void>((resolve) => { markStarted = resolve; });
-  const ended = instance.launch({ dropPendingUpdates }, () => markStarted());
+
+  const telegram = instance.telegram;
+  const originalCallApi = telegram.callApi.bind(telegram);
+  telegram.callApi = ((method, payload, signal) => {
+    if (method === 'getUpdates') markStarted();
+    return originalCallApi(method, payload, signal);
+  }) as typeof telegram.callApi;
+
+  const ended = instance.launch({ dropPendingUpdates });
   // `ended` is awaited by whoever supervises this launch; if that supervision
   // is dropped (abandoned instance) a loop failure must not become an
   // unhandled rejection.
@@ -151,7 +146,7 @@ function launchPolling(instance: Telegraf, dropPendingUpdates: boolean): Launch 
 /**
  * Launch a fresh instance and wait for polling to start, with a timeout.
  * On timeout or early loop exit the instance is abandoned (and stopped as
- * soon as possible) and the error is thrown.
+ * soon as it starts polling, if it ever does) and the error is thrown.
  */
 async function launchAndAwaitStart(dropPendingUpdates: boolean): Promise<Launch> {
   const launch = launchPolling(createBot(), dropPendingUpdates);
@@ -203,6 +198,12 @@ export async function startTelegramBot(): Promise<void> {
 
   // Drop any pending updates from before restart
   const launch = await launchAndAwaitStart(true);
+  if (stopped) {
+    // stopTelegramBot() ran while we were launching: do not leave this
+    // instance polling untracked.
+    abandonInstance(launch, 'shutdown');
+    return;
+  }
   bot = launch.instance;
 
   logger.info('Telegram bot started (long-polling)');

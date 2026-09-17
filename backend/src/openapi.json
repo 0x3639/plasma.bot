@@ -55,14 +55,25 @@
               }
             }
           },
+          "415": {
+            "description": "Content-Type is not application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedMediaTypeError"
+                }
+              }
+            }
+          },
           "429": {
-            "description": "Rate limited (IP quota exceeded or address has active fusion)",
+            "description": "Rate limited (IP quota exceeded, address has an active or in-flight fusion, or the service-wide daily cap is reached)",
             "content": {
               "application/json": {
                 "schema": {
                   "oneOf": [
                     { "$ref": "#/components/schemas/RateLimitedError" },
-                    { "$ref": "#/components/schemas/AddressUnavailableError" }
+                    { "$ref": "#/components/schemas/AddressUnavailableError" },
+                    { "$ref": "#/components/schemas/GlobalLimitReachedError" }
                   ]
                 }
               }
@@ -129,7 +140,7 @@
           {
             "name": "page",
             "in": "query",
-            "schema": { "type": "integer", "default": 1, "minimum": 1 }
+            "schema": { "type": "integer", "default": 1, "minimum": 1, "maximum": 10000 }
           },
           {
             "name": "limit",
@@ -263,6 +274,32 @@
               "available": { "type": "number" },
               "needed": { "type": "number" },
               "nextUnfuseAt": { "type": "string", "nullable": true, "format": "date-time" }
+            }
+          }
+        }
+      },
+      "UnsupportedMediaTypeError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["UNSUPPORTED_MEDIA_TYPE"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "GlobalLimitReachedError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "enum": [false] },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "enum": ["GLOBAL_LIMIT_REACHED"] },
+              "message": { "type": "string" }
             }
           }
         }

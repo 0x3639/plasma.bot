@@ -3,7 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { Address } from 'znn-typescript-sdk';
 import { Fusion } from '../../models/Fusion.js';
 import { FuseRequest } from '../../models/FuseRequest.js';
-import { handleFuseCommand, MAX_IN_FLIGHT_COMMANDS, _getInFlightForTesting } from '../../telegram/commands.js';
+import {
+  handleFuseCommand,
+  MAX_IN_FLIGHT_COMMANDS,
+  MAX_IN_FLIGHT_REJECTION_REPLIES,
+  _getInFlightForTesting,
+  _resetForTesting as _resetCommandsForTesting,
+} from '../../telegram/commands.js';
 import { getReservedQsr, tryReserveQsr, _resetForTesting } from '../../services/balance.js';
 import { createMockAccountInfo, createMockAddress } from '../setup/mocks.js';
 
@@ -103,7 +109,9 @@ describe('Telegram /fuse', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _resetForTesting();
-    mockSend.mockResolvedValue({ hash: { toString: () => 'tg-tx-hash' } });
+    _resetCommandsForTesting();
+    let txSeq = 0;
+    mockSend.mockImplementation(async () => ({ hash: { toString: () => `tg-tx-${++txSeq}` } }));
     mockGetAccountInfo.mockResolvedValue(createMockAccountInfo(10_000));
     mockGetEntriesByAddress.mockResolvedValue({ list: [] });
   });
@@ -203,9 +211,11 @@ describe('Telegram /fuse', () => {
 
       expect(mockSend).toHaveBeenCalledTimes(1);
       expect(await FuseRequest.countDocuments({ telegramUserId: userId })).toBe(1);
+      // Five were rejected; one rejection reply is sent per user, the rest
+      // are coalesced (dropped) so a burst cannot amplify into replies.
       const rejected = ctxs.filter((c) => lastReply(c).includes('already have a command in progress'));
-      expect(rejected).toHaveLength(5);
-      expect(_getInFlightForTesting()).toEqual({ commands: 0, users: 0 });
+      expect(rejected).toHaveLength(1);
+      expect(_getInFlightForTesting()).toMatchObject({ commands: 0, users: 0, rejectionReplies: 0, droppedRejections: 4 });
     });
 
     it('bounds total in-flight commands and rejects the rest without doing any work', async () => {
@@ -228,8 +238,86 @@ describe('Telegram /fuse', () => {
 
       releaseBalance();
       await Promise.all(running);
-      expect(_getInFlightForTesting()).toEqual({ commands: 0, users: 0 });
+      expect(_getInFlightForTesting()).toMatchObject({ commands: 0, users: 0 });
       expect(mockSend).toHaveBeenCalledTimes(MAX_IN_FLIGHT_COMMANDS);
+    });
+
+    it('a flood of never-settling rejection replies is bounded and coalesced', async () => {
+      // Fill every command slot with distinct users whose handlers are held
+      // at the balance read.
+      let releaseBalance!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseBalance = resolve; });
+      mockGetAccountInfo.mockImplementation(async () => { await gate; return createMockAccountInfo(10_000); });
+      const holders = Array.from({ length: MAX_IN_FLIGHT_COMMANDS }, (_, i) =>
+        makeCtx(`/fuse 20 ${randomAddress()}`, 20_000 + i));
+      const running = holders.map(run);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // 40 more updates from 40 distinct users whose rejection replies do not
+      // settle (Telegram never answers) for the whole assertion window, plus
+      // 10 repeats from one of them.
+      const pendingReplies: Array<() => void> = [];
+      const hang = () => new Promise<void>((resolve) => { pendingReplies.push(resolve); });
+      const flood = Array.from({ length: 40 }, (_, i) => {
+        const c = makeCtx(`/fuse 20 ${randomAddress()}`, 30_000 + i);
+        c.reply.mockImplementation(hang);
+        return c;
+      });
+      const repeats = Array.from({ length: 10 }, () => {
+        const c = makeCtx(`/fuse 20 ${randomAddress()}`, 30_000);
+        c.reply.mockImplementation(hang);
+        return c;
+      });
+      const floodRuns = [...flood, ...repeats].map(run);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const snap = _getInFlightForTesting();
+      expect(snap.commands).toBe(MAX_IN_FLIGHT_COMMANDS);
+      expect(snap.rejectionReplies).toBe(MAX_IN_FLIGHT_REJECTION_REPLIES);
+      // Everything beyond the reply bound (and every repeat) was dropped
+      // without starting a network operation.
+      const repliesStarted = [...flood, ...repeats].filter((c) => c.reply.mock.calls.length > 0).length;
+      expect(repliesStarted).toBe(MAX_IN_FLIGHT_REJECTION_REPLIES);
+      expect(snap.droppedRejections).toBe(50 - MAX_IN_FLIGHT_REJECTION_REPLIES);
+      // No pre-admission work happened for any rejected update.
+      expect(await FuseRequest.countDocuments({ telegramUserId: { $gte: 30_000 } })).toBe(0);
+
+      releaseBalance();
+      await Promise.all(running);
+      expect(_getInFlightForTesting().commands).toBe(0);
+
+      // Telegram finally answers: the bounded replies drain and the bound resets.
+      pendingReplies.forEach((resolve) => resolve());
+      await Promise.all(floodRuns);
+      expect(_getInFlightForTesting().rejectionReplies).toBe(0);
+    });
+
+    it('one user gets at most one pending rejection reply', async () => {
+      let releaseBalance!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseBalance = resolve; });
+      mockGetAccountInfo.mockImplementation(async () => { await gate; return createMockAccountInfo(10_000); });
+      const holder = makeCtx(`/fuse 20 ${randomAddress()}`, 555);
+      const holding = run(holder);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const pendingReplies: Array<() => void> = [];
+      const hang = () => new Promise<void>((resolve) => { pendingReplies.push(resolve); });
+      const dupes = Array.from({ length: 5 }, () => {
+        const c = makeCtx(`/fuse 20 ${randomAddress()}`, 555);
+        c.reply.mockImplementation(hang);
+        return c;
+      });
+      const dupeRuns = dupes.map(run);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(dupes.filter((c) => c.reply.mock.calls.length > 0)).toHaveLength(1);
+      expect(_getInFlightForTesting().rejectionReplies).toBe(1);
+
+      releaseBalance();
+      await holding;
+      pendingReplies.forEach((resolve) => resolve());
+      await Promise.all(dupeRuns);
+      expect(_getInFlightForTesting().rejectionReplies).toBe(0);
     });
 
     it('sequential requests admit exactly the per-user max', async () => {

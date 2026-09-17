@@ -15,11 +15,15 @@ const SEND_TIMEOUT_MS = 30_000;
 /**
  * Upper bound on jobs waiting for the queue. Every queued job admits a request
  * that has already taken a global-cap slot, an address lock and a QSR
- * reservation, and each job costs at least INTER_TX_DELAY_MS of wall-clock
- * time. Without a bound a large burst could keep valid jobs waiting longer than
- * the processing-lease window, so callers get a fast "busy" rejection instead.
+ * reservation. The bound is sized against the WORST-case per-job cost
+ * (SEND_TIMEOUT_MS + INTER_TX_DELAY_MS = 32s) so that even a queue full of
+ * timing-out sends drains inside the 10-minute processing lease
+ * (15 x 32s = 8 min): a job that is admitted always reaches its send slot
+ * with its lease still valid, and callers beyond the bound get a fast "busy"
+ * rejection instead of holding resources they can never use. In normal
+ * operation a job costs ~3s, so the bound represents well under a minute.
  */
-export const MAX_QUEUE_DEPTH = 50;
+export const MAX_QUEUE_DEPTH = 15;
 
 let queueDepth = 0;
 

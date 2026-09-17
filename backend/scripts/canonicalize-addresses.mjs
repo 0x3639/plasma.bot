@@ -38,7 +38,7 @@ async function canonicalizeCollection(collection, label) {
       if (error && error.code === 11000 && doc.status === 'processing') {
         await collection.updateOne(
           { _id: doc._id },
-          { $set: { status: 'failed', errorMessage: 'Superseded duplicate processing lock (address canonicalization)' } },
+          { $set: { beneficiary: canonical, status: 'failed', errorMessage: 'Superseded duplicate processing lock (address canonicalization)' } },
         );
         failedLocks++;
       } else {

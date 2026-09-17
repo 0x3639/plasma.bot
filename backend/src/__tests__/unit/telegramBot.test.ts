@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const fake = vi.hoisted(() => {
+  /**
+   * Models Telegraf's real launch phases:
+   *   launch() -> getMe (network) -> onLaunch -> deleteWebhook (network)
+   *   -> startPolling(): Polling object created, first getUpdates via telegram.callApi
+   * stop() throws until the Polling object exists.
+   */
   class FakeTelegraf {
     static instances: FakeTelegraf[] = [];
     commands = new Map<string, (ctx: unknown) => unknown>();
@@ -12,6 +18,9 @@ const fake = vi.hoisted(() => {
     stopped = false;
     launched = false;
     pollingReady = false;
+    telegram = {
+      callApi: async (_method: string, _payload?: unknown, _signal?: unknown): Promise<unknown> => undefined,
+    };
 
     constructor(public token: string) {
       FakeTelegraf.instances.push(this);
@@ -28,14 +37,19 @@ const fake = vi.hoisted(() => {
       });
     }
     stop() {
-      // Real Telegraf: throws until the Polling object exists, which is only
-      // created after getMe() resolves (i.e. after onLaunch fired).
       if (!this.pollingReady) throw new Error('Bot is not running!');
       this.stopped = true;
       this.endLoop();
     }
-    /** Simulate Telegraf: getMe succeeded, polling begins. */
-    start() { this.onLaunch?.(); this.pollingReady = true; }
+    /** getMe resolved: Telegraf fires onLaunch. Nothing is pollable yet. */
+    getMeDone() { this.onLaunch?.(); }
+    /** deleteWebhook resolved, startPolling(): first getUpdates goes out. */
+    beginPolling() {
+      this.pollingReady = true;
+      void this.telegram.callApi('getUpdates', { timeout: 50, offset: 0 });
+    }
+    /** Convenience: full happy-path start. */
+    start() { this.getMeDone(); this.beginPolling(); }
   }
   return { FakeTelegraf };
 });
@@ -93,20 +107,53 @@ describe('Telegram bot lifecycle', () => {
     await assertion;
   });
 
-  it('stops a timed-out instance if getMe eventually succeeds (no untracked poller)', async () => {
+  it('is not "started" after getMe/onLaunch alone: readiness is the first getUpdates', async () => {
+    const starting = startTelegramBot();
+    let settled = false;
+    starting.then(() => { settled = true; }, () => { settled = true; });
+
+    instances()[0].getMeDone();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(settled).toBe(false);
+
+    instances()[0].beginPolling();
+    await starting;
+    expect(settled).toBe(true);
+  });
+
+  it('stops a timed-out instance whenever it eventually starts polling, even much later', async () => {
     const starting = startTelegramBot();
     const assertion = expect(starting).rejects.toThrow(/timed out/);
     await vi.advanceTimersByTimeAsync(15_000);
     await assertion;
 
     const slow = instances()[0];
-    expect(slow.stopped).toBe(false); // could not be stopped yet: not running
+    // getMe answered after the timeout, but deleteWebhook is still hanging:
+    // nothing to stop yet, and nothing polling.
+    slow.getMeDone();
+    await vi.advanceTimersByTimeAsync(20 * 60 * 1000); // well past any retry budget
+    expect(slow.stopped).toBe(false);
+    expect(slow.pollingReady).toBe(false);
 
-    // Telegram finally answers getMe and Telegraf starts polling on the
-    // instance nobody tracks any more.
-    slow.start();
-    await vi.advanceTimersByTimeAsync(200);
+    // deleteWebhook finally resolves and Telegraf starts polling on the
+    // instance nobody tracks any more: it is stopped immediately.
+    slow.beginPolling();
+    await vi.advanceTimersByTimeAsync(0);
     expect(slow.stopped).toBe(true);
+  });
+
+  it('a stop during the initial launch prevents the instance from polling', async () => {
+    const starting = startTelegramBot();
+    stopTelegramBot();
+
+    instances()[0].start();
+    await starting;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(instances()[0].stopped).toBe(true);
+
+    // And no supervisor relaunch follows.
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(instances()).toHaveLength(1);
   });
 
   it('applies the start timeout to relaunches as well', async () => {
@@ -123,9 +170,9 @@ describe('Telegram bot lifecycle', () => {
     await vi.advanceTimersByTimeAsync(2_000);  // backoff 2 -> relaunch #3
     expect(instances()).toHaveLength(3);
 
-    // The abandoned #2 is stopped once it would have started.
+    // The abandoned #2 is stopped the moment it starts polling.
     instances()[1].start();
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(0);
     expect(instances()[1].stopped).toBe(true);
     expect(instances()[2].stopped).toBe(false);
   });
