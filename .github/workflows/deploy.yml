@@ -88,6 +88,9 @@ jobs:
             docker compose up -d mongodb
             sleep 5
 
+            echo "==> Stopping the running backend so migrations never race a live writer..."
+            docker compose stop backend || true
+
             echo "==> Running database migrations..."
             docker compose run --rm -T backend node backend/scripts/migrate-indexes.mjs
             docker compose run --rm -T backend node backend/scripts/add-telegram-fields.mjs

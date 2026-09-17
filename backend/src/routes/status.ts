@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { Fusion } from '../models/Fusion.js';
 import { CONFIG } from '../config/index.js';
-import { isValidAddressFormat } from '../utils/address.js';
+import { canonicalizeAddress } from '../utils/address.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -66,9 +66,11 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // GET /api/fusions/:address — fusions for a specific address (paginated, newest first)
 router.get('/:address', asyncHandler<{ address: string }>(async (req, res) => {
-  const { address } = req.params;
+  // Stored beneficiaries are canonical (lowercase bech32); accept any valid
+  // encoding of the address and query/echo the canonical form.
+  const address = canonicalizeAddress(req.params.address);
 
-  if (!isValidAddressFormat(address)) {
+  if (!address) {
     res.status(400).json({ error: 'Invalid Zenon address format' });
     return;
   }

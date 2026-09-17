@@ -93,18 +93,38 @@ describe('Telegram bot lifecycle', () => {
     await expect(starting).resolves.toBeUndefined();
   });
 
-  it('rejects if the launch fails before polling starts', async () => {
+  it('retries with backoff when the first launch fails before polling starts', async () => {
     const starting = startTelegramBot();
-    instances()[0].failLoop(new Error('401: Unauthorized'));
-    await expect(starting).rejects.toThrow(/Unauthorized|before it started/);
+    instances()[0].failLoop(new Error('getaddrinfo ENOTFOUND api.telegram.org'));
+    await expect(starting).resolves.toBeUndefined();
     expect(instances()).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1_000); // first backoff
+    expect(instances()).toHaveLength(2);
+
+    // The retry succeeds and the bot is up without a process restart.
+    instances()[1].start();
+    await vi.advanceTimersByTimeAsync(0);
+    instances()[1].failLoop(new Error('later failure'));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(instances()).toHaveLength(3);
   });
 
-  it('rejects when polling never starts within the launch timeout', async () => {
+  it('retries when polling never starts within the launch timeout', async () => {
     const starting = startTelegramBot();
-    const assertion = expect(starting).rejects.toThrow(/timed out/);
     await vi.advanceTimersByTimeAsync(15_000);
-    await assertion;
+    await expect(starting).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(instances()).toHaveLength(2);
+  });
+
+  it('does not retry a failed first launch after an explicit stop', async () => {
+    const starting = startTelegramBot();
+    stopTelegramBot();
+    instances()[0].failLoop(new Error('boom'));
+    await starting;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(instances()).toHaveLength(1);
   });
 
   it('is not "started" after getMe/onLaunch alone: readiness is the first getUpdates', async () => {
@@ -123,9 +143,8 @@ describe('Telegram bot lifecycle', () => {
 
   it('stops a timed-out instance whenever it eventually starts polling, even much later', async () => {
     const starting = startTelegramBot();
-    const assertion = expect(starting).rejects.toThrow(/timed out/);
     await vi.advanceTimersByTimeAsync(15_000);
-    await assertion;
+    await starting;
 
     const slow = instances()[0];
     // getMe answered after the timeout, but deleteWebhook is still hanging:

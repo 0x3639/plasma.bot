@@ -182,10 +182,13 @@ async function launchAndAwaitStart(dropPendingUpdates: boolean): Promise<Launch>
  * Start the Telegram bot (if TELEGRAM_BOT_TOKEN is set).
  * Uses long-polling — no webhook server or extra port needed.
  *
- * Resolves once polling has started; rejects if the first launch fails or
- * times out. After a successful start the polling loop is supervised: if it
- * ever ends while the bot has not been stopped, a fresh instance is launched
- * with bounded exponential backoff.
+ * Resolves once polling has started, or once a failed first launch has been
+ * handed to the supervisor. The polling loop is supervised from then on: if
+ * the first launch fails (transient DNS/Telegram error, slow getMe) or the
+ * loop ever ends while the bot has not been stopped, a fresh instance is
+ * launched with bounded exponential backoff. A permanently bad token
+ * therefore shows up as a repeating (max once per minute) relaunch error
+ * rather than a single line at boot.
  */
 export async function startTelegramBot(): Promise<void> {
   if (!CONFIG.TELEGRAM_BOT_TOKEN) {
@@ -196,8 +199,17 @@ export async function startTelegramBot(): Promise<void> {
   stopped = false;
   logger.info('Telegram bot launching...');
 
-  // Drop any pending updates from before restart
-  const launch = await launchAndAwaitStart(true);
+  let launch: Launch;
+  try {
+    // Drop any pending updates from before restart
+    launch = await launchAndAwaitStart(true);
+  } catch (error) {
+    if (stopped) return;
+    logger.error('Telegram bot failed to start; will retry', { error });
+    void supervisePolling(null);
+    return;
+  }
+
   if (stopped) {
     // stopTelegramBot() ran while we were launching: do not leave this
     // instance polling untracked.
@@ -211,7 +223,7 @@ export async function startTelegramBot(): Promise<void> {
   void supervisePolling(launch);
 }
 
-async function supervisePolling(initial: Launch): Promise<void> {
+async function supervisePolling(initial: Launch | null): Promise<void> {
   let current: Launch | null = initial;
   let attempt = 0;
   let runStartedAt = Date.now();

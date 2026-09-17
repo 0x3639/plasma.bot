@@ -60,6 +60,14 @@ nits were applied afterwards:
 | Contract suite lacked end-to-end `BAD_REQUEST` and `INTERNAL_ERROR`. | Fault-injection routes under `/api/agent/` exercise both through the production error handler. |
 | Missing focused tests for queue-full log throttling and unfuse priority/rollback. | `fuseExecutor.test.ts` asserts one warning per 10s with the suppressed count; new `unfuse.test.ts` asserts `{ priority: true }` and rollback to `active` after a failed cancel. |
 
+## PR review follow-ups (CodeRabbit)
+
+| Comment | Fix |
+|---------|-----|
+| Deploy leaves the previous backend running while migrations execute. | `docker compose stop backend` before the migration step, so no migration ever runs against a live writer. The startup canonicalization sweep stays as defence in depth. |
+| `GET /api/fusions/:address` kept the raw path value, so an uppercase encoding could not find its (canonical) history. | The route canonicalizes the parameter, uses it for validation, the query and the response; a well-formed address with a bad checksum is now a 400 instead of an empty 200. |
+| A transient first-launch failure (DNS, Telegram 5xx, slow `getMe`) left the Telegram bot down until process restart. | A failed or timed-out first launch is handed to the same supervisor/backoff loop as a post-start failure; `startTelegramBot()` no longer rejects for launch failures. |
+
 ## Deferred: Caddy ingress (out of scope for this branch)
 
 **Decision (2026-09-17):** the Caddy 413 contract gap is intentionally NOT addressed on this branch. It
