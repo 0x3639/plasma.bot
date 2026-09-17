@@ -38,6 +38,16 @@ All six were accepted and remediated on branch `fix/codex-security-audit-2026-09
 | Production body-parser failures (malformed JSON, > 1 KB body) returned a generic 500 outside the documented envelope; the contract test bypassed the real middleware. | `errorHandler` classifies `express.json()` errors and keeps their 4xx status: `400 INVALID_JSON`, `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`, `400 BAD_REQUEST`; unexpected errors on the agent API are `500 INTERNAL_ERROR` in the envelope. OpenAPI/README/llms.txt updated. The contract test now mounts the production stack (`setupSecurity` + route + `errorHandler`), scans `errorHandler.ts` for emitted codes, and exercises malformed JSON, oversized JSON, end-to-end `RATE_LIMITED` (per-IP limiter via trusted `X-Forwarded-For`) and end-to-end `REQUEST_EXPIRED` (lease swept inside the queue slot). |
 | Nit: queue-depth arithmetic ignored `beforeSend` latency. | `beforeSend` is bounded by `BEFORE_SEND_TIMEOUT_MS` (5s); worst case is now 15 × 37s = 9.25 min < the 10-minute lease. |
 
+### Round 4 outcome
+
+Codex confirmed every item from the original audit and rounds 1–3 closed, and raised two new items. The
+review loop was capped at four rounds, so these were handled as follows:
+
+| Finding | Status |
+|---------|--------|
+| Low: public fuse traffic can fill the bounded send queue and starve receive/unfuse maintenance; `receiveAllPending` then refetches the same page up to 20 times, logging each failure; queue-full fuse rejections log individually. (A regression introduced by the round-1 queue bound.) | **Fixed on the branch, not re-reviewed by Codex.** `serializedSend` has a `priority` lane exempt from `MAX_QUEUE_DEPTH`, used by `receiveAllPending` and the unfuse cycle (both already bounded by their own cycles). `receiveAllPending` stops its cycle on `SendQueueFullError` instead of refetching. Queue-full fuse rejections log one line per 10s with a suppressed count. Tests: priority job admitted when the queue is full; receive cycle fetches once and stops; a never-settling `beforeSend` times out after 5s and the next job proceeds. |
+| Medium (code review): the deployed `Caddyfile` enforces `request_body max_size 1KB` ahead of `reverse_proxy`, so an oversized agent request gets Caddy's plain 413 instead of the documented `PAYLOAD_TOO_LARGE` envelope. | **Open — needs an ingress change.** The `Caddyfile` currently carries uncommitted Cloudflare mTLS work, so it was left untouched. Suggested fix: add a `handle_errors` block that answers 413 on `/api/agent/*` with `{"success":false,"error":{"code":"PAYLOAD_TOO_LARGE","message":"Request body exceeds the 1 KB limit"}}` (`respond` with `header Content-Type application/json`), and a proxy-level test. Alternatively raise Caddy's limit slightly above Express's 1 KB so Express always produces the envelope. |
+
 ## Shared lifecycle
 
 The web, agent-API and Telegram handlers now all delegate to `services/fuseExecutor.ts` for the

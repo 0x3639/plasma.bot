@@ -113,7 +113,8 @@ export async function runUnfuseCycle(): Promise<void> {
 
     try {
       const cancelBlock = zenon.embedded.plasma.cancel(Hash.parse(fusion.fusionId!));
-      await serializedSend(cancelBlock, keyPair);
+      // Maintenance lane: reclaiming QSR must not be starved by fuse traffic.
+      await serializedSend(cancelBlock, keyPair, { priority: true });
 
       claimed.status = 'unfused';
       claimed.unfusedAt = new Date();

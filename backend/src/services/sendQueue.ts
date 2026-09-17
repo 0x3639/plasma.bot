@@ -45,6 +45,14 @@ export interface SerializedSendOptions {
    * (its 'processing' lease) after waiting in line.
    */
   beforeSend?: () => Promise<void> | void;
+  /**
+   * Wallet-maintenance jobs (receiving pending blocks, unfusing to reclaim
+   * QSR) are exempt from MAX_QUEUE_DEPTH. Public fuse traffic alone can fill
+   * the bounded queue; without this lane it could starve the very work that
+   * restores the wallet's capacity. Maintenance callers are already bounded
+   * by their own cycles, so they cannot grow the queue without limit.
+   */
+  priority?: boolean;
 }
 
 function delay(ms: number): Promise<void> {
@@ -75,7 +83,7 @@ export function serializedSend(
 ): Promise<unknown> {
   const zenon = getZenon();
 
-  if (queueDepth >= MAX_QUEUE_DEPTH) {
+  if (!options.priority && queueDepth >= MAX_QUEUE_DEPTH) {
     return Promise.reject(new SendQueueFullError());
   }
   queueDepth++;

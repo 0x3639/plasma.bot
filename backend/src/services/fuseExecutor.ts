@@ -9,6 +9,33 @@ import { logger } from '../utils/logger.js';
 
 type FusionDoc = InstanceType<typeof Fusion>;
 
+// Queue-full rejections come in bursts by definition; log one line per
+// interval with a count instead of one line per rejected request.
+const QUEUE_FULL_LOG_INTERVAL_MS = 10_000;
+let lastQueueFullLogAt = 0;
+let suppressedQueueFull = 0;
+
+function logQueueFullThrottled(address: string, source: string): void {
+  const now = Date.now();
+  if (now - lastQueueFullLogAt < QUEUE_FULL_LOG_INTERVAL_MS) {
+    suppressedQueueFull++;
+    return;
+  }
+  lastQueueFullLogAt = now;
+  logger.warn('Fuse rejected: send queue full', {
+    address,
+    source,
+    suppressedSinceLastLog: suppressedQueueFull,
+  });
+  suppressedQueueFull = 0;
+}
+
+/** @internal Reset the log throttle for tests. */
+export function _resetForTesting(): void {
+  lastQueueFullLogAt = 0;
+  suppressedQueueFull = 0;
+}
+
 export type FuseOutcome =
   | { ok: true; fusion: FusionDoc }
   | { ok: false; code: 'QUEUE_FULL' | 'LEASE_LOST' | 'FUSE_FAILED' };
@@ -53,7 +80,7 @@ export async function executeFuse(
   } catch (error) {
     if (error instanceof SendQueueFullError) {
       // Rejected before entering the queue: nothing was sent.
-      logger.warn('Fuse rejected: send queue full', { address, tier, source: fuseRequest.source });
+      logQueueFullThrottled(address, fuseRequest.source);
       fuseRequest.status = 'failed';
       fuseRequest.errorMessage = 'Send queue full';
       await fuseRequest.save().catch(() => undefined);

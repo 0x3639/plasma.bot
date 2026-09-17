@@ -113,7 +113,44 @@ describe('serializedSend', () => {
     });
   });
 
+  describe('beforeSend timeout', () => {
+    it('times out a never-settling hook and lets the next job proceed', async () => {
+      mockSend.mockResolvedValue({ hash: 'tx' });
+
+      const stuck = serializedSend(mockBlock, mockKeyPair, {
+        beforeSend: () => new Promise<void>(() => undefined),
+      });
+      const next = serializedSend(mockBlock, mockKeyPair);
+      const stuckAssertion = expect(stuck).rejects.toThrow(/timeout after 5000ms/);
+
+      await vi.advanceTimersByTimeAsync(5000); // hook timeout
+      await stuckAssertion;
+      await vi.advanceTimersByTimeAsync(3000); // next job's send + inter-tx delay
+      await expect(next).resolves.toEqual({ hash: 'tx' });
+
+      expect(mockSend).toHaveBeenCalledTimes(1); // the stuck job never sent
+      expect(getSendQueueDepth()).toBe(0);
+    });
+  });
+
   describe('queue depth bound', () => {
+    it('priority (maintenance) jobs are admitted when the queue is full', async () => {
+      mockSend.mockResolvedValue({ hash: 'tx' });
+      const queued: Promise<unknown>[] = [];
+      for (let i = 0; i < MAX_QUEUE_DEPTH; i++) {
+        queued.push(serializedSend(mockBlock, mockKeyPair));
+      }
+      await expect(serializedSend(mockBlock, mockKeyPair)).rejects.toBeInstanceOf(SendQueueFullError);
+
+      const maintenance = serializedSend(mockBlock, mockKeyPair, { priority: true });
+      expect(getSendQueueDepth()).toBe(MAX_QUEUE_DEPTH + 1);
+
+      await vi.advanceTimersByTimeAsync(3000 * (MAX_QUEUE_DEPTH + 1));
+      await Promise.all(queued);
+      await expect(maintenance).resolves.toEqual({ hash: 'tx' });
+      expect(mockSend).toHaveBeenCalledTimes(MAX_QUEUE_DEPTH + 1);
+    });
+
     it('rejects immediately once MAX_QUEUE_DEPTH jobs are waiting, then recovers', async () => {
       mockSend.mockResolvedValue({ hash: 'tx' });
       const queued: Promise<unknown>[] = [];

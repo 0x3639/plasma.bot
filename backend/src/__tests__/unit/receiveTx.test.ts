@@ -19,9 +19,14 @@ vi.mock('../../services/wallet.js', () => ({
   getWalletAddress: () => createMockAddress(),
 }));
 
-vi.mock('../../services/sendQueue.js', () => ({
-  serializedSend: (...args: unknown[]) => mockSend(...args),
-}));
+vi.mock('../../services/sendQueue.js', async () => {
+  const actual = await vi.importActual('../../services/sendQueue.js') as Record<string, unknown>;
+  return {
+    ...actual,
+    serializedSend: (...args: unknown[]) => mockSend(...args),
+  };
+});
+import { SendQueueFullError } from '../../services/sendQueue.js';
 
 vi.mock('znn-typescript-sdk', async () => {
   const actual = await vi.importActual('znn-typescript-sdk') as Record<string, unknown>;
@@ -82,5 +87,25 @@ describe('receiveAllPending', () => {
     // 2 succeeded, 1 failed
     expect(count).toBe(2);
     expect(mockSend).toHaveBeenCalledTimes(3);
+  });
+
+  it('sends receives on the maintenance (priority) lane', async () => {
+    mockGetUnreceived.mockResolvedValueOnce({ list: [{ hash: 'h1' }] });
+    await receiveAllPending();
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(mockSend.mock.calls[0][2]).toEqual({ priority: true });
+  });
+
+  it('stops the cycle on a full send queue instead of refetching the same page', async () => {
+    // A full page of 50 blocks that never shrinks because nothing is sent.
+    const fullPage = { list: Array.from({ length: 50 }, (_, i) => ({ hash: `h${i}` })) };
+    mockGetUnreceived.mockResolvedValue(fullPage);
+    mockSend.mockRejectedValue(new SendQueueFullError());
+
+    const count = await receiveAllPending();
+
+    expect(count).toBe(0);
+    expect(mockGetUnreceived).toHaveBeenCalledTimes(1);
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,7 +1,7 @@
 import { AccountBlockTemplate } from 'znn-typescript-sdk';
 import { getZenon } from './zenon.js';
 import { getKeyPair, getWalletAddress } from './wallet.js';
-import { serializedSend } from './sendQueue.js';
+import { serializedSend, SendQueueFullError } from './sendQueue.js';
 import { logger } from '../utils/logger.js';
 
 const PAGE_SIZE = 50;
@@ -21,7 +21,7 @@ export async function receiveAllPending(): Promise<number> {
 
   let received = 0;
 
-  for (let page = 0; page < MAX_PAGES; page++) {
+  pages: for (let page = 0; page < MAX_PAGES; page++) {
     const unreceived = await zenon.ledger.getUnreceivedBlocksByAddress(address, 0, PAGE_SIZE);
 
     if (!unreceived || !unreceived.list || unreceived.list.length === 0) {
@@ -31,9 +31,17 @@ export async function receiveAllPending(): Promise<number> {
     for (const block of unreceived.list) {
       try {
         const receiveBlock = AccountBlockTemplate.receive(block.hash);
-        await serializedSend(receiveBlock, keyPair);
+        // Maintenance lane: never rejected by the public-traffic depth bound.
+        await serializedSend(receiveBlock, keyPair, { priority: true });
         received++;
       } catch (error) {
+        if (error instanceof SendQueueFullError) {
+          // Defensive: the priority lane should make this unreachable, but if
+          // it ever fires, re-fetching the same page would just fail the same
+          // way; stop this cycle and let the next one retry.
+          logger.warn('Receive cycle stopped: send queue full', { received });
+          break pages;
+        }
         logger.error('Failed to receive block', {
           hash: block.hash?.toString(),
           error,
