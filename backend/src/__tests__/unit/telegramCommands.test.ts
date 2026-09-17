@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { Address } from 'znn-typescript-sdk';
 import { Fusion } from '../../models/Fusion.js';
 import { FuseRequest } from '../../models/FuseRequest.js';
-import { handleFuseCommand } from '../../telegram/commands.js';
+import { handleFuseCommand, MAX_IN_FLIGHT_COMMANDS, _getInFlightForTesting } from '../../telegram/commands.js';
 import { getReservedQsr, tryReserveQsr, _resetForTesting } from '../../services/balance.js';
 import { createMockAccountInfo, createMockAddress } from '../setup/mocks.js';
 
@@ -195,25 +195,41 @@ describe('Telegram /fuse', () => {
   });
 
   describe('per-user quota under a concurrent burst', () => {
-    it('admits at most the per-user max from one batch of distinct addresses', async () => {
+    it('rejects a burst from one user up front: one command in flight per user', async () => {
       const userId = 777;
       const ctxs = Array.from({ length: 6 }, () => makeCtx(`/fuse 20 ${randomAddress()}`, userId));
 
       await Promise.all(ctxs.map(run));
 
-      // Count-after-insert guarantees at most `max` admissions. It can
-      // under-admit when several inserts land before any recount (the same
-      // property as the global cap), so the bound is the invariant here.
-      const sends = mockSend.mock.calls.length;
-      expect(sends).toBeLessThanOrEqual(4);
-      const completed = await FuseRequest.countDocuments({ telegramUserId: userId, status: 'completed' });
-      const rateLimited = await FuseRequest.countDocuments({ telegramUserId: userId, status: 'rate_limited' });
-      expect(completed).toBe(sends);
-      expect(completed + rateLimited).toBe(6);
-      expect(await FuseRequest.countDocuments({ status: 'processing' })).toBe(0);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(await FuseRequest.countDocuments({ telegramUserId: userId })).toBe(1);
+      const rejected = ctxs.filter((c) => lastReply(c).includes('already have a command in progress'));
+      expect(rejected).toHaveLength(5);
+      expect(_getInFlightForTesting()).toEqual({ commands: 0, users: 0 });
+    });
 
-      const rejected = ctxs.filter((c) => lastReply(c).toLowerCase().includes('limit'));
-      expect(rejected).toHaveLength(rateLimited);
+    it('bounds total in-flight commands and rejects the rest without doing any work', async () => {
+      // Hold every handler at the balance read so they stay in flight.
+      let releaseBalance!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseBalance = resolve; });
+      mockGetAccountInfo.mockImplementation(async () => { await gate; return createMockAccountInfo(10_000); });
+
+      const inFlight = Array.from({ length: MAX_IN_FLIGHT_COMMANDS }, (_, i) =>
+        makeCtx(`/fuse 20 ${randomAddress()}`, 10_000 + i));
+      const running = inFlight.map(run);
+      // Let them all reach the gate.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(_getInFlightForTesting().commands).toBe(MAX_IN_FLIGHT_COMMANDS);
+
+      const extra = makeCtx(`/fuse 20 ${randomAddress()}`, 99_999);
+      await run(extra);
+      expect(lastReply(extra)).toContain('busy');
+      expect(await FuseRequest.countDocuments({ telegramUserId: 99_999 })).toBe(0);
+
+      releaseBalance();
+      await Promise.all(running);
+      expect(_getInFlightForTesting()).toEqual({ commands: 0, users: 0 });
+      expect(mockSend).toHaveBeenCalledTimes(MAX_IN_FLIGHT_COMMANDS);
     });
 
     it('sequential requests admit exactly the per-user max', async () => {

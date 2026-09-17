@@ -46,21 +46,67 @@ function reply(ctx: Context, text: string): Promise<void> {
 }
 
 /**
+ * Bound on commands being processed at once.
+ *
+ * Command handlers run detached from Telegraf's polling batch (so a fuse
+ * waiting in the send queue cannot stall other users' updates), which also
+ * means the batch no longer provides back-pressure. Every command does
+ * pre-admission work (DB counts, a chain query for the address check, a node
+ * balance read) before any quota is consumed, so without a bound a flood of
+ * commands could pile that work up without limit. Beyond this many in-flight
+ * commands a caller gets an immediate "busy" reply and no work is done.
+ */
+export const MAX_IN_FLIGHT_COMMANDS = 16;
+
+let inFlightCommands = 0;
+// One in-flight command per Telegram user: a burst from one account is
+// rejected up front instead of racing through the pre-checks in parallel
+// (confirmTelegramUserSlot remains the durable, DB-level guarantee).
+const inFlightUsers = new Set<number>();
+
+/** @internal Snapshot for tests. */
+export function _getInFlightForTesting(): { commands: number; users: number } {
+  return { commands: inFlightCommands, users: inFlightUsers.size };
+}
+
+/**
  * Handle the /fuse command with all subcommands.
  *
  * Never rejects: this is the error boundary for one update, so one user's
  * failure cannot take down the shared polling loop.
  */
 export async function handleFuseCommand(ctx: Context): Promise<void> {
+  const telegramUserId = ctx.from?.id;
+
+  if (inFlightCommands >= MAX_IN_FLIGHT_COMMANDS) {
+    logger.warn('Telegram command rejected: too many in flight', {
+      inFlight: inFlightCommands,
+      telegramUserId,
+    });
+    await reply(ctx, formatError('The bot is busy right now. Please try again in a moment.'));
+    return;
+  }
+
+  if (telegramUserId !== undefined && inFlightUsers.has(telegramUserId)) {
+    await reply(ctx, formatError('You already have a command in progress. Please wait for it to finish.'));
+    return;
+  }
+
+  inFlightCommands++;
+  if (telegramUserId !== undefined) inFlightUsers.add(telegramUserId);
+
   try {
     await dispatchFuseCommand(ctx);
   } catch (error) {
     logger.error('Telegram command handler failed', {
       error,
-      telegramUserId: ctx.from?.id,
+      telegramUserId,
       chatId: ctx.chat?.id,
     });
     await reply(ctx, formatError('Something went wrong. Please try again later.'));
+  } finally {
+    inFlightCommands--;
+    if (telegramUserId !== undefined) inFlightUsers.delete(telegramUserId);
   }
 }
 

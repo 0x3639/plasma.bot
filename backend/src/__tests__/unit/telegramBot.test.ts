@@ -11,6 +11,7 @@ const fake = vi.hoisted(() => {
     failLoop!: (err: Error) => void;
     stopped = false;
     launched = false;
+    pollingReady = false;
 
     constructor(public token: string) {
       FakeTelegraf.instances.push(this);
@@ -27,12 +28,14 @@ const fake = vi.hoisted(() => {
       });
     }
     stop() {
-      if (!this.launched) throw new Error('Bot is not running!');
+      // Real Telegraf: throws until the Polling object exists, which is only
+      // created after getMe() resolves (i.e. after onLaunch fired).
+      if (!this.pollingReady) throw new Error('Bot is not running!');
       this.stopped = true;
       this.endLoop();
     }
     /** Simulate Telegraf: getMe succeeded, polling begins. */
-    start() { this.onLaunch?.(); }
+    start() { this.onLaunch?.(); this.pollingReady = true; }
   }
   return { FakeTelegraf };
 });
@@ -90,6 +93,43 @@ describe('Telegram bot lifecycle', () => {
     await assertion;
   });
 
+  it('stops a timed-out instance if getMe eventually succeeds (no untracked poller)', async () => {
+    const starting = startTelegramBot();
+    const assertion = expect(starting).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+
+    const slow = instances()[0];
+    expect(slow.stopped).toBe(false); // could not be stopped yet: not running
+
+    // Telegram finally answers getMe and Telegraf starts polling on the
+    // instance nobody tracks any more.
+    slow.start();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(slow.stopped).toBe(true);
+  });
+
+  it('applies the start timeout to relaunches as well', async () => {
+    const starting = startTelegramBot();
+    instances()[0].start();
+    await starting;
+
+    instances()[0].failLoop(new Error('polling died'));
+    await vi.advanceTimersByTimeAsync(1_000); // backoff 1 -> relaunch #2
+    expect(instances()).toHaveLength(2);
+
+    // Relaunch #2 never starts polling.
+    await vi.advanceTimersByTimeAsync(15_000); // relaunch timeout
+    await vi.advanceTimersByTimeAsync(2_000);  // backoff 2 -> relaunch #3
+    expect(instances()).toHaveLength(3);
+
+    // The abandoned #2 is stopped once it would have started.
+    instances()[1].start();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(instances()[1].stopped).toBe(true);
+    expect(instances()[2].stopped).toBe(false);
+  });
+
   it('relaunches a fresh instance when the polling loop dies', async () => {
     const starting = startTelegramBot();
     instances()[0].start();
@@ -101,6 +141,27 @@ describe('Telegram bot lifecycle', () => {
     expect(instances()).toHaveLength(2);
     expect(instances()[1].launched).toBe(true);
     expect(instances()[1].errorHandler).toBe(telegramErrorHandler);
+  });
+
+  it('a loop failure after start does not produce an unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', listener);
+    try {
+      const starting = startTelegramBot();
+      instances()[0].start();
+      await starting;
+
+      instances()[0].failLoop(new Error('polling died'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      // Let any rejection tracking settle (fake timers: flush the macrotask queue).
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(unhandled).toEqual([]);
+      expect(instances()).toHaveLength(2);
+    } finally {
+      process.off('unhandledRejection', listener);
+    }
   });
 
   it('backs off exponentially across repeated failures', async () => {

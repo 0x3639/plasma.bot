@@ -12,6 +12,14 @@ All six were accepted and remediated on branch `fix/codex-security-audit-2026-09
 | 5 | Oversized pagination values leave fusion-list requests unanswered | Low | `page` is bounded by `CONFIG.MAX_PAGE_NUMBER` (10 000), keeping `skip` a safe integer. Both listing routes are wrapped in `asyncHandler`, which forwards rejections to the error middleware (generic 500). |
 | 6 | A failed Telegram reply corrupts completed-fusion accounting | Low | Transaction outcome and notification are separated: `executeFuse()` settles record state and the reservation before any reply is attempted. Reservations are owned tokens (`QsrReservation`) whose `release()` / `scheduleRelease()` are idempotent, so no path can decrement the shared counter twice. |
 
+## Round 2 (Codex re-review of round 1)
+
+| Finding | Fix |
+|---------|-----|
+| Deploy race: the previous backend container keeps serving old (non-canonicalizing) code while the canonicalization migration runs, so it can write an uppercase record the migration never sees. | `canonicalizeStoredAddresses()` now also runs at backend startup, after the DB connect and before any entry point is served; startup fails closed if it errors. The deploy migration is kept as an explicit, observable step. |
+| Detached Telegram command handlers remove the polling batch's back-pressure, leaving pre-admission DB/node work unbounded. | `handleFuseCommand` bounds concurrency: at most `MAX_IN_FLIGHT_COMMANDS` (16) commands in flight (extra callers get an immediate "busy" reply and no work is done) and at most one in-flight command per Telegram user. `confirmTelegramUserSlot` stays as the durable DB-level guarantee. |
+| A launch timeout cannot stop Telegraf while `getMe()` is pending, so a timed-out instance could later become an untracked poller; relaunches had no start timeout. | Every launch (first and relaunch) goes through `launchAndAwaitStart` with the same timeout. A launch that fails or times out is *abandoned*: its `onLaunch` hook stops the instance as soon as Telegraf's polling object exists, so it can never poll untracked. |
+
 ## Shared lifecycle
 
 The web, agent-API and Telegram handlers now all delegate to `services/fuseExecutor.ts` for the
@@ -20,8 +28,10 @@ recommended for these invariants.
 
 ## Tests added
 
-- `telegramCommands.test.ts` — uppercase alias rejected against DB, processing lock and chain state; canonical storage; concurrent burst bounded by the per-user max; sequential requests admit exactly the max; replies that reject never escape and never alter a completed request or double-release a reservation.
-- `telegramBot.test.ts` — start resolves on `onLaunch`; failed/timed-out first launch rejects; loop death triggers relaunch with exponential backoff; explicit stop suppresses relaunch; non-throwing error handler registered.
+- `telegramCommands.test.ts` — uppercase alias rejected against DB, processing lock and chain state; canonical storage; a one-user burst is rejected up front (one in-flight command per user); the global in-flight bound rejects extra commands without doing any work; sequential requests admit exactly the max; replies that reject never escape and never alter a completed request or double-release a reservation.
+- `telegramBot.test.ts` — start resolves on `onLaunch`; failed/timed-out first launch rejects; a timed-out instance is stopped once `getMe` eventually succeeds; relaunches honour the start timeout; loop death triggers relaunch with exponential backoff and no unhandled rejection; explicit stop suppresses relaunch; non-throwing error handler registered.
+- `telegramRateLimiter.test.ts` — concurrent post-insert confirmations admit at most the per-user max; sequential admit exactly the max; `rate_limited` rollbacks do not consume quota.
+- `canonicalizeRecords.test.ts` — startup canonicalization of both collections; colliding processing lock is failed; idempotent no-op.
 - `fuseExecutor.test.ts` — success holds the reservation once; swept lease aborts without signing; queue-full and send-failure paths.
 - `reconcile.test.ts` — refreshed lease survives the sweep; swept lease cannot be reacquired.
 - `sendQueue.test.ts` — `beforeSend` ordering, hook failure does not poison the queue, depth bound and recovery.
