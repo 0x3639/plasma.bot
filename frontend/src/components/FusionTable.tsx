@@ -67,7 +67,7 @@ export function FusionTable() {
             {fusions.map((fusion, i) => (
               <tr
                 key={fusion.txHash || `${fusion.beneficiary}-${i}`}
-                className="border-b border-faint-border hover:bg-faint"
+                className="border-b border-faint-border last:border-b-0 hover:bg-faint"
               >
                 <td className={TD}>
                   <a
