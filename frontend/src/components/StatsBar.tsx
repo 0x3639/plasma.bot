@@ -2,7 +2,8 @@ import { useStats } from '../hooks/useFusions';
 import { AddressRow } from './AddressRow';
 
 /** Unformatted number (no locale separators), at most 2 decimals. */
-function plain(n: number | undefined, loading: boolean): string {
+function plain(n: number | undefined, loading: boolean, failed: boolean): string {
+  if (failed) return 'ERR';
   if (loading || n == null) return '...';
   return String(parseFloat(n.toFixed(2)));
 }
@@ -17,7 +18,7 @@ function StatCell({ label, value, divider }: { label: string; value: string; div
 }
 
 export function StatsBar() {
-  const { data, isLoading } = useStats();
+  const { data, isLoading, isError } = useStats();
 
   return (
     <div className="mb-9">
@@ -27,9 +28,9 @@ export function StatsBar() {
       </div>
 
       <div className="grid grid-cols-3 border border-ink">
-        <StatCell label="QSR_AVAILABLE" value={plain(data?.qsrAvailable, isLoading)} divider />
-        <StatCell label="QSR_FUSED" value={plain(data?.qsrFused, isLoading)} divider />
-        <StatCell label="BLOCK_HEIGHT" value={plain(data?.currentHeight, isLoading)} />
+        <StatCell label="QSR_AVAILABLE" value={plain(data?.qsrAvailable, isLoading, isError)} divider />
+        <StatCell label="QSR_FUSED" value={plain(data?.qsrFused, isLoading, isError)} divider />
+        <StatCell label="BLOCK_HEIGHT" value={plain(data?.currentHeight, isLoading, isError)} />
       </div>
     </div>
   );

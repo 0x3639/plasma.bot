@@ -14,8 +14,8 @@ const TIERS: { id: Tier; label: string; qsr: number }[] = [
 
 export function TierSelector({ selected, onSelect, availableTiers }: TierSelectorProps) {
   return (
-    <div className="mb-6">
-      <label className="mb-1.5 block text-[11px] text-dim">TIER:</label>
+    <fieldset className="mb-6 min-w-0 border-0 p-0">
+      <legend className="mb-1.5 block p-0 text-[11px] text-dim">TIER:</legend>
       <div className="grid grid-cols-3">
         {TIERS.map((tier) => {
           const isAvailable = !availableTiers || availableTiers.includes(tier.id);
@@ -45,6 +45,6 @@ export function TierSelector({ selected, onSelect, availableTiers }: TierSelecto
           );
         })}
       </div>
-    </div>
+    </fieldset>
   );
 }

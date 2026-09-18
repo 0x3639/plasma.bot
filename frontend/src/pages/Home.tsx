@@ -101,7 +101,8 @@ export function Home() {
             <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink px-5 py-2.5">
               <h1 className="text-[13px] font-bold text-ink">PLAZMA.BOT // QSR FUSION TERMINAL</h1>
               <span className="text-[12px] text-dim">
-                v2.1 · <span className="text-ink">{statsError ? 'OFFLINE' : 'ONLINE'}</span>
+                v2.1 ·{' '}
+                <span className="text-ink">{statsError ? 'OFFLINE' : stats ? 'ONLINE' : 'CONNECTING'}</span>
               </span>
             </div>
 

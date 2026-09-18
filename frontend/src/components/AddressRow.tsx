@@ -6,14 +6,20 @@ interface AddressRowProps {
 
 /** Bordered address row with explorer link and COPY button (bot wallet / donations). */
 export function AddressRow({ address }: AddressRowProps) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   const copyAddress = async () => {
     if (!address) return;
-    await navigator.clipboard.writeText(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+    setTimeout(() => setCopyState('idle'), 2000);
   };
+
+  const copyLabel = copyState === 'copied' ? 'COPIED' : copyState === 'failed' ? 'ERR' : 'COPY';
 
   return (
     <div className="flex items-center gap-3 border border-ink px-3 py-2.5">
@@ -31,11 +37,13 @@ export function AddressRow({ address }: AddressRowProps) {
       )}
       <button
         onClick={copyAddress}
-        className="shrink-0 cursor-pointer border border-dim px-2.5 py-[3px] text-[11px] text-dim hover:border-ink hover:text-ink"
-        title="Copy address"
+        className={`shrink-0 cursor-pointer border px-2.5 py-[3px] text-[11px] ${
+          copyState === 'failed' ? 'border-error text-error' : 'border-dim text-dim hover:border-ink hover:text-ink'
+        }`}
+        title={copyState === 'failed' ? 'Copy failed' : 'Copy address'}
         aria-label="Copy address"
       >
-        {copied ? 'COPIED' : 'COPY'}
+        {copyLabel}
       </button>
     </div>
   );
