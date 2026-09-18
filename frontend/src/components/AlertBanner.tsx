@@ -9,39 +9,35 @@ export function AlertBanner({ type, message, txHash, onDismiss }: AlertBannerPro
   return (
     <div
       role="alert"
-      className={`mb-6 rounded-xl border p-4 ${
-        type === 'success'
-          ? 'bg-green-badge border-green-primary/30 text-green-primary'
-          : 'bg-error/10 border-error/30 text-error'
+      className={`mt-3.5 flex justify-between gap-3 border px-3.5 py-3 text-[12px] ${
+        type === 'success' ? 'border-ink bg-faint text-ink' : 'border-error bg-error/10 text-error'
       }`}
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="font-medium">{message}</p>
-          {txHash && (
-            <p className="font-mono text-xs mt-1 opacity-80 break-all">
-              TX:{' '}
-              <a
-                href={`https://zenonhub.io/explorer/transaction/${txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:opacity-100"
-              >
-                {txHash}
-              </a>
-            </p>
-          )}
-        </div>
-        {onDismiss && (
-          <button
-            onClick={onDismiss}
-            aria-label="Dismiss"
-            className="text-current opacity-60 hover:opacity-100 ml-4 text-lg leading-none cursor-pointer"
-          >
-            &times;
-          </button>
+      <div className="min-w-0">
+        <p>{message}</p>
+        {txHash && (
+          <p className="mt-1 break-all text-[11px] opacity-80">
+            TX:{' '}
+            <a
+              href={`https://zenonhub.io/explorer/transaction/${txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:opacity-100"
+            >
+              {txHash}
+            </a>
+          </p>
         )}
       </div>
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 cursor-pointer self-start text-[12px] text-dim hover:text-ink"
+        >
+          [x]
+        </button>
+      )}
     </div>
   );
 }

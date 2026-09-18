@@ -26,6 +26,15 @@ jobs:
       - name: Lint frontend
         run: npm run lint --workspace=frontend
 
+      - name: Run frontend tests
+        run: npm test --workspace=frontend
+
+      - name: Build frontend and verify self-hosted fonts
+        run: |
+          npm run build --workspace=frontend
+          test "$(ls frontend/dist/assets/jetbrains-mono-latin-*-normal-*.woff2 | wc -l)" -eq 3
+          ! grep -q "fonts.googleapis.com" frontend/dist/index.html
+
   deploy:
     needs: test
     runs-on: ubuntu-latest

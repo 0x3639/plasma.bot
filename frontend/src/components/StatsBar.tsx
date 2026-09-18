@@ -1,72 +1,49 @@
-import { useState } from 'react';
 import { useStats } from '../hooks/useFusions';
+import { AddressRow } from './AddressRow';
 
-function truncateAddress(address: string, startChars = 10, endChars = 6): string {
-  if (address.length <= startChars + endChars + 3) return address;
-  return `${address.slice(0, startChars)}...${address.slice(-endChars)}`;
+/** Unformatted number (no locale separators), at most 2 decimals. */
+function plain(n: number | undefined, loading: boolean, failed: boolean): string {
+  if (n == null && failed) return 'ERR';
+  if (loading || n == null) return '...';
+  return String(parseFloat(n.toFixed(2)));
+}
+
+function StatCell({ label, value, className = '' }: { label: string; value: string; className?: string }) {
+  return (
+    <div className={`min-w-0 p-3 sm:p-4 ${className}`}>
+      <p className="mb-1.5 truncate text-[11px] text-dim">{label}</p>
+      <p className="truncate text-[18px] font-bold text-ink sm:text-[24px]">{value}</p>
+    </div>
+  );
 }
 
 export function StatsBar() {
-  const { data, isLoading } = useStats();
-  const [copied, setCopied] = useState(false);
-
-  const copyAddress = async () => {
-    if (!data?.walletAddress) return;
-    await navigator.clipboard.writeText(data.walletAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const { data, isLoading, isError } = useStats();
 
   return (
-    <div className="mb-8 space-y-4">
-      {/* Wallet Address */}
-      <div className="bg-bg-card border border-border rounded-xl p-4">
-        <p className="text-text-secondary text-xs uppercase tracking-wider mb-2">Bot Wallet Address</p>
-        <div className="flex items-center gap-2">
-          {isLoading ? (
-            <p className="font-mono text-sm text-green-primary truncate flex-1">...</p>
-          ) : (
-            <a
-              href={`https://zenonhub.io/explorer/account/${data?.walletAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-sm text-green-primary flex-1 hover:underline"
-            >
-              <span className="sm:hidden">{data?.walletAddress ? truncateAddress(data.walletAddress, 6, 6) : ''}</span>
-              <span className="hidden sm:inline">{data?.walletAddress ?? ''}</span>
-            </a>
-          )}
-          <button
-            onClick={copyAddress}
-            className="text-text-muted hover:text-green-primary transition-colors text-xs shrink-0 cursor-pointer"
-            title="Copy address"
-            aria-label="Copy address"
-          >
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
-        </div>
+    <div className="mb-9">
+      <p className="mb-1.5 text-[11px] text-dim">BOT_WALLET:</p>
+      <div className="mb-6">
+        <AddressRow address={data?.walletAddress} />
       </div>
 
-      {/* QSR Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1.4fr] gap-3 sm:gap-4">
-        <div className="bg-bg-card border border-border rounded-xl p-4 sm:p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
-          <p className="text-text-secondary text-xs sm:text-sm mb-1 uppercase tracking-wider">QSR Available</p>
-          <p className="font-mono text-2xl sm:text-3xl font-bold text-green-primary">
-            {isLoading ? '...' : data?.qsrAvailable.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-bg-card border border-border rounded-xl p-4 sm:p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
-          <p className="text-text-secondary text-xs sm:text-sm mb-1 uppercase tracking-wider">QSR Fused</p>
-          <p className="font-mono text-2xl sm:text-3xl font-bold text-green-primary">
-            {isLoading ? '...' : data?.qsrFused.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="col-span-2 sm:col-span-1 bg-bg-card border border-border rounded-xl p-4 sm:p-5 shadow-[0_0_20px_var(--color-green-glow),inset_0_1px_0_var(--color-border-accent)]">
-          <p className="text-text-secondary text-xs sm:text-sm mb-1 uppercase tracking-wider">Block Height</p>
-          <p className="font-mono text-2xl sm:text-3xl font-bold text-green-primary">
-            {isLoading ? '...' : data?.currentHeight.toLocaleString()}
-          </p>
-        </div>
+      {/* 2 + 1 on phones (block height spans the row), 3-up from sm */}
+      <div className="grid grid-cols-2 border border-ink sm:grid-cols-3">
+        <StatCell
+          label="QSR_AVAILABLE"
+          value={plain(data?.qsrAvailable, isLoading, isError)}
+          className="border-r border-b border-ink sm:border-b-0"
+        />
+        <StatCell
+          label="QSR_FUSED"
+          value={plain(data?.qsrFused, isLoading, isError)}
+          className="border-b border-ink sm:border-r sm:border-b-0"
+        />
+        <StatCell
+          label="BLOCK_HEIGHT"
+          value={plain(data?.currentHeight, isLoading, isError)}
+          className="col-span-2 sm:col-span-1"
+        />
       </div>
     </div>
   );

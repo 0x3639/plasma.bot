@@ -1,47 +1,76 @@
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-500.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
 @import "tailwindcss";
 
 @theme {
-  --color-bg-primary: #0a0a14;
-  --color-bg-card: #14142a;
-  --color-bg-card-hover: #1a1a2e;
-  --color-bg-input: #0d0d18;
-
-  --color-border: #2a2a45;
-  --color-border-accent: #00ff4133;
-  --color-border-focus: #00ff41;
-
-  --color-green-primary: #00ff41;
-  --color-green-dim: #00cc33;
-  --color-green-glow: #00ff4120;
-  --color-green-badge: #00ff4118;
-
-  --color-text-primary: #e8e8e8;
-  --color-text-secondary: #8a8a9a;
-  --color-text-muted: #8686a0;
-
+  --color-*: initial;
+  --color-ink: #00ff41;
+  --color-dim: #00aa2c;
+  --color-faint: rgba(0, 255, 65, 0.07);
+  --color-faint-border: #003311;
+  --color-bg: #000000;
   --color-error: #ff4444;
-  --color-warning: #ffaa00;
+  --color-black: #000000;
+  --color-transparent: transparent;
 
-  --font-mono: 'JetBrains Mono', 'Space Mono', 'Fira Code', ui-monospace, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-sans: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-*: initial;
 }
 
 body {
   margin: 0;
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-family: Inter, system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
 }
 
+::selection {
+  background: var(--color-ink);
+  color: #000;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-primary);
+  background: var(--color-bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
+  background: var(--color-dim);
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: blink 1.1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor-blink {
+    animation: none;
+  }
+}
+
+.scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 255, 65, 0.03) 2px,
+    rgba(0, 255, 65, 0.03) 4px
+  );
 }
