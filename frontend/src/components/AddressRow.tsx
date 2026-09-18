@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface AddressRowProps {
   address?: string;
@@ -7,6 +7,11 @@ interface AddressRowProps {
 /** Bordered address row with explorer link and COPY button (bot wallet / donations). */
 export function AddressRow({ address }: AddressRowProps) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+  }, []);
 
   const copyAddress = async () => {
     if (!address) return;
@@ -16,10 +21,12 @@ export function AddressRow({ address }: AddressRowProps) {
     } catch {
       setCopyState('failed');
     }
-    setTimeout(() => setCopyState('idle'), 2000);
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopyState('idle'), 2000);
   };
 
   const copyLabel = copyState === 'copied' ? 'COPIED' : copyState === 'failed' ? 'ERR' : 'COPY';
+  const copyStatus = copyState === 'copied' ? 'Address copied' : copyState === 'failed' ? 'Copy failed' : '';
 
   return (
     <div className="flex items-center gap-3 border border-ink px-3 py-2.5">
@@ -45,6 +52,9 @@ export function AddressRow({ address }: AddressRowProps) {
       >
         {copyLabel}
       </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {copyStatus}
+      </span>
     </div>
   );
 }

@@ -26,6 +26,9 @@ jobs:
       - name: Lint frontend
         run: npm run lint --workspace=frontend
 
+      - name: Run frontend tests
+        run: npm test --workspace=frontend
+
   deploy:
     needs: test
     runs-on: ubuntu-latest

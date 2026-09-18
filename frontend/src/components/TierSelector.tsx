@@ -35,7 +35,7 @@ export function TierSelector({ selected, onSelect, availableTiers }: TierSelecto
               disabled={!isAvailable}
               aria-pressed={isSelected}
               title={isAvailable ? undefined : 'Insufficient QSR'}
-              className={`border border-ink p-3.5 text-center ${state}`}
+              className={`border border-ink px-2 py-3.5 text-center sm:px-3.5 ${state}`}
             >
               <span className="block text-[12px]">
                 {isSelected ? '[x]' : '[ ]'} {tier.label}

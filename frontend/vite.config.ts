@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -35,6 +35,11 @@ function inlineCssPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), inlineCssPlugin()],
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    css: false,
+  },
   server: {
     port: 5173,
     proxy: {
