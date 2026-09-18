@@ -6,10 +6,16 @@ import { FusionTable } from '../components/FusionTable';
 import { AlertBanner } from '../components/AlertBanner';
 import { DonationSection } from '../components/DonationSection';
 import { TelegramCard } from '../components/TelegramCard';
+import { SectionHeader } from '../components/SectionHeader';
 import { useFuseRequest } from '../hooks/useFuseRequest';
 import { useStats } from '../hooks/useFusions';
 
 type Tier = 'low' | 'medium' | 'high';
+
+const TIER_QSR: Record<Tier, number> = { low: 20, medium: 80, high: 120 };
+
+/** CRT scanline overlay; disable with VITE_SCANLINES=false. */
+const SCANLINES = import.meta.env.VITE_SCANLINES !== 'false';
 
 function formatTimeUntil(isoDate: string): string {
   const diff = new Date(isoDate).getTime() - Date.now();
@@ -20,13 +26,26 @@ function formatTimeUntil(isoDate: string): string {
   return `~${minutes}m`;
 }
 
+function truncateAddress(addr: string): string {
+  return addr.length > 8 ? `${addr.slice(0, 8)}...` : addr;
+}
+
+function FaqTier({ qsr, label, divider }: { qsr: number; label: string; divider?: boolean }) {
+  return (
+    <div className={`p-3 ${divider ? 'border-r border-dim' : ''}`}>
+      <p className="text-[18px] font-bold text-ink">{qsr}</p>
+      <p className="text-[11px] text-dim">{label}</p>
+    </div>
+  );
+}
+
 export function Home() {
   const [address, setAddress] = useState('');
   const [tier, setTier] = useState<Tier | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string; txHash?: string } | null>(null);
 
   const fuseMutation = useFuseRequest();
-  const { data: stats } = useStats();
+  const { data: stats, isError: statsError } = useStats();
 
   const availableTiers = stats?.availableTiers;
   const noTiersAvailable = availableTiers && availableTiers.length === 0;
@@ -36,6 +55,12 @@ export function Home() {
 
   const isValidAddress = /^z1[a-z0-9]{38}$/.test(address);
   const canSubmit = isValidAddress && effectiveTier !== null && !fuseMutation.isPending && !noTiersAvailable;
+
+  const submitLabel = fuseMutation.isPending
+    ? '>> EXECUTING...'
+    : canSubmit && effectiveTier
+      ? `>> EXECUTE FUSE (${TIER_QSR[effectiveTier]} QSR)`
+      : '>> EXECUTE FUSE';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,138 +77,124 @@ export function Home() {
       if (result.success) {
         setAlert({
           type: 'success',
-          message: `Fused ${result.amount} QSR to ${address}`,
+          message: `OK: fused ${result.amount} QSR to ${truncateAddress(address)}`,
           txHash: result.txHash,
         });
         setAddress('');
         setTier(null);
       } else {
-        setAlert({ type: 'error', message: result.error || 'Fuse request failed' });
+        setAlert({ type: 'error', message: `ERR: ${result.error || 'fuse request failed'}` });
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Network error. Please try again.';
-      setAlert({ type: 'error', message });
+      const message = err instanceof Error ? err.message : 'network error. please try again.';
+      setAlert({ type: 'error', message: `ERR: ${message}` });
     }
   };
 
   return (
-    <main className="min-h-screen bg-bg-primary">
-      <div className="max-w-2xl mx-auto px-4 py-6 sm:py-12">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <span className="text-green-primary text-2xl sm:text-3xl" aria-hidden="true">&#9889;</span>
-            <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Plasma Bot</h1>
-          </div>
-          <p className="text-text-secondary text-sm max-w-md mx-auto">
-            Fuse QSR to generate plasma for your Zenon address.
-            Plasma enables feeless transactions on the Network of Momentum.
-          </p>
-        </div>
+    <>
+      {SCANLINES && <div className="scanlines" aria-hidden="true" />}
+      <main className="relative min-h-screen bg-bg">
+        <div className="mx-auto max-w-[760px] px-4 pt-8 pb-16">
+          <div className="border-2 border-ink">
+            {/* Title bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink px-5 py-2.5">
+              <h1 className="text-[13px] font-bold text-ink">PLAZMA.BOT // QSR FUSION TERMINAL</h1>
+              <span className="text-[12px] text-dim">
+                v2.1 · <span className="text-ink">{statsError ? 'OFFLINE' : 'ONLINE'}</span>
+              </span>
+            </div>
 
-        {/* QSR Stats */}
-        <StatsBar />
+            <div className="px-4 pt-7 pb-10 sm:px-7">
+              {/* Intro */}
+              <pre className="mb-7 whitespace-pre-wrap text-[12px] leading-[1.5] text-ink">
+{`> fuse QSR --> plasma --> feeless tx
+> network: zenon / network of momentum
+> rate limit: 4 req / ip / 24h · 1 active fusion per address`}
+              </pre>
 
-        {/* Alert */}
-        {alert && (
-          <AlertBanner
-            type={alert.type}
-            message={alert.message}
-            txHash={alert.txHash}
-            onDismiss={() => setAlert(null)}
-          />
-        )}
+              <StatsBar />
 
-        {/* Fuse Form */}
-        <div className="bg-bg-card border border-border rounded-xl p-6 mb-8">
-          <h2 className="text-lg font-semibold text-text-primary mb-5">Request Plasma</h2>
+              {/* Request form */}
+              <SectionHeader className="mb-4">[ REQUEST_PLASMA ]</SectionHeader>
 
-          {noTiersAvailable ? (
-            <div className="text-center py-4">
-              <p className="text-text-secondary text-sm mb-2">
-                The bot is currently out of QSR.
-              </p>
-              {stats?.nextUnfuseAt ? (
-                <p className="text-text-muted text-sm">
-                  QSR will be reclaimed in {formatTimeUntil(stats.nextUnfuseAt)}. Please check back then.
+              {noTiersAvailable ? (
+                <p className="text-[12px] text-dim">
+                  ERR: bot out of QSR —{' '}
+                  {stats?.nextUnfuseAt ? `reclaim in ${formatTimeUntil(stats.nextUnfuseAt)}` : 'check back later'}
                 </p>
               ) : (
-                <p className="text-text-muted text-sm">
-                  Please check back later.
-                </p>
+                <form onSubmit={handleSubmit}>
+                  <AddressInput value={address} onChange={setAddress} />
+                  <TierSelector selected={effectiveTier} onSelect={setTier} availableTiers={availableTiers} />
+                  <button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className={`w-full border border-ink p-3.5 text-[14px] font-bold uppercase tracking-[0.1em] ${
+                      canSubmit ? 'cursor-pointer bg-ink text-black' : 'cursor-not-allowed bg-black text-dim'
+                    }`}
+                  >
+                    {submitLabel}
+                  </button>
+                </form>
               )}
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit}>
-              <AddressInput value={address} onChange={setAddress} />
-              <TierSelector selected={effectiveTier} onSelect={setTier} availableTiers={availableTiers} />
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className={`w-full py-3 rounded-lg font-semibold text-sm uppercase tracking-wider transition-all ${
-                  canSubmit
-                    ? 'bg-green-primary text-bg-primary hover:bg-green-dim cursor-pointer shadow-[0_0_20px_var(--color-green-glow)]'
-                    : 'bg-border text-text-muted cursor-not-allowed'
-                }`}
-              >
-                {fuseMutation.isPending ? 'Fusing...' : 'Fuse Plasma'}
-              </button>
-            </form>
-          )}
-        </div>
 
-        {/* Active Fusions Table */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-text-primary mb-4">Active Fusions</h2>
-          <FusionTable />
-        </div>
+              {alert && (
+                <AlertBanner
+                  type={alert.type}
+                  message={alert.message}
+                  txHash={alert.txHash}
+                  onDismiss={() => setAlert(null)}
+                />
+              )}
 
-        {/* Telegram Bot */}
-        <div className="mb-8">
-          <TelegramCard />
-        </div>
+              {/* Active fusions */}
+              <SectionHeader className="mt-11 mb-3">
+                [ ACTIVE_FUSIONS{stats ? ` :: ${stats.activeFusionCount}` : ''} ]
+              </SectionHeader>
+              <FusionTable />
 
-        {/* Footer / FAQ */}
-        <div className="bg-bg-card border border-border rounded-xl p-6">
-          <h3 className="text-base font-semibold text-text-primary mb-3">
-            What is Plasma?
-          </h3>
-          <p className="text-text-secondary text-sm leading-relaxed mb-4">
-            Plasma is the anti-spam mechanism on the Zenon Network that enables feeless transactions.
-            It is generated by fusing QSR tokens to an address. The more QSR fused, the higher the
-            transaction throughput. QSR can be unfused at any time with no loss.
-          </p>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="bg-bg-primary rounded-lg p-3">
-              <p className="font-mono text-lg text-green-primary font-bold">20</p>
-              <p className="text-text-muted text-xs">Low QSR</p>
-            </div>
-            <div className="bg-bg-primary rounded-lg p-3">
-              <p className="font-mono text-lg text-green-dim font-bold">80</p>
-              <p className="text-text-muted text-xs">Medium QSR</p>
-            </div>
-            <div className="bg-bg-primary rounded-lg p-3">
-              <p className="font-mono text-lg text-green-primary font-bold">120</p>
-              <p className="text-text-muted text-xs">High QSR</p>
+              {/* Telegram */}
+              <SectionHeader className="mt-11 mb-3">[ TELEGRAM_UPLINK ]</SectionHeader>
+              <TelegramCard />
+
+              {/* FAQ */}
+              <SectionHeader className="mt-11 mb-3">[ WHAT_IS_PLASMA ]</SectionHeader>
+              <p className="mb-4 text-[12px] leading-[1.7] text-dim">
+                plasma is the anti-spam mechanism on the zenon network that enables feeless transactions. it is
+                generated by fusing QSR tokens to an address. the more QSR fused, the higher the transaction
+                throughput. QSR can be unfused at any time with no loss.
+              </p>
+              <div className="grid grid-cols-3 border border-dim text-center">
+                <FaqTier qsr={20} label="LOW" divider />
+                <FaqTier qsr={80} label="MED" divider />
+                <FaqTier qsr={120} label="HIGH" />
+              </div>
+
+              {/* Donations */}
+              <SectionHeader className="mt-11 mb-3">[ DONATE ]</SectionHeader>
+              <DonationSection />
+
+              {/* Footer */}
+              <p className="mt-11 text-[11px] text-dim">
+                &gt; powered_by:{' '}
+                <a
+                  href="https://zenon.network"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-dim hover:text-ink"
+                >
+                  zenon.network
+                </a>
+                <span
+                  className="cursor-blink ml-1.5 inline-block h-[13px] w-[7px] bg-ink align-text-bottom"
+                  aria-hidden="true"
+                />
+              </p>
             </div>
           </div>
         </div>
-
-        {/* Donations */}
-        <DonationSection />
-
-        <p className="text-center text-text-muted text-xs mt-8">
-          Powered by the{' '}
-          <a
-            href="https://zenon.network"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-green-primary hover:underline transition-colors"
-          >
-            Zenon Network
-          </a>
-        </p>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

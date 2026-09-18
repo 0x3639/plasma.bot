@@ -9,39 +9,28 @@ export function AddressInput({ value, onChange, error }: AddressInputProps) {
   const showError = value.length > 0 && !isValid;
 
   return (
-    <div className="mb-5">
-      <label htmlFor="address-input" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
-        Zenon Address
+    <div className="mb-3.5">
+      <label htmlFor="address-input" className="mb-1.5 block text-[11px] text-dim">
+        ZENON_ADDRESS:
       </label>
-      <div className="relative">
+      <div className={`mb-1.5 flex items-center border ${showError || error ? 'border-error' : 'border-ink'}`}>
+        <span className="pl-3 text-[13px] text-dim" aria-hidden="true">&gt;</span>
         <input
           id="address-input"
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value.toLowerCase())}
-          placeholder="z1qr39my..."
-          className={`w-full bg-bg-input border rounded-lg px-4 py-3 font-mono text-sm text-text-primary placeholder-text-muted outline-none transition-colors ${
-            showError || error
-              ? 'border-error'
-              : value && isValid
-                ? 'border-green-primary'
-                : 'border-border focus:border-border-focus'
-          }`}
+          placeholder="z1_"
+          className="min-w-0 flex-1 border-none bg-transparent p-3 text-[13px] text-ink outline-none placeholder:text-dim"
           spellCheck={false}
           autoComplete="off"
         />
-        {value && isValid && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-primary text-lg">
-            &#10003;
-          </span>
-        )}
+        {value && isValid && <span className="pr-3 text-[13px] text-ink">OK</span>}
       </div>
       {showError && (
-        <p className="text-error text-xs mt-1">
-          Invalid address. Must start with z1 and be 40 characters.
-        </p>
+        <p className="text-[11px] text-error">ERR: invalid address — must start with z1 and be 40 chars</p>
       )}
-      {error && <p className="text-error text-xs mt-1">{error}</p>}
+      {error && <p className="text-[11px] text-error">ERR: {error}</p>}
     </div>
   );
 }

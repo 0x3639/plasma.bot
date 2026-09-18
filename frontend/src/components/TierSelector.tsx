@@ -6,22 +6,26 @@ interface TierSelectorProps {
   availableTiers?: string[];
 }
 
-const TIERS: { id: Tier; label: string; shortLabel?: string; qsr: number; description: string }[] = [
-  { id: 'low', label: 'Low', qsr: 20, description: 'Basic' },
-  { id: 'medium', label: 'Medium', shortLabel: 'Med', qsr: 80, description: 'Regular' },
-  { id: 'high', label: 'High', qsr: 120, description: 'Full' },
+const TIERS: { id: Tier; label: string; qsr: number }[] = [
+  { id: 'low', label: 'LOW', qsr: 20 },
+  { id: 'medium', label: 'MED', qsr: 80 },
+  { id: 'high', label: 'HIGH', qsr: 120 },
 ];
 
 export function TierSelector({ selected, onSelect, availableTiers }: TierSelectorProps) {
   return (
-    <div className="mb-5">
-      <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
-        Plasma Tier
-      </label>
-      <div className="grid grid-cols-3 gap-3">
+    <div className="mb-6">
+      <label className="mb-1.5 block text-[11px] text-dim">TIER:</label>
+      <div className="grid grid-cols-3">
         {TIERS.map((tier) => {
           const isAvailable = !availableTiers || availableTiers.includes(tier.id);
           const isSelected = selected === tier.id;
+
+          const state = !isAvailable
+            ? 'bg-black text-ink opacity-40 cursor-not-allowed'
+            : isSelected
+              ? 'bg-ink text-black cursor-pointer'
+              : 'bg-black text-ink hover:bg-faint cursor-pointer';
 
           return (
             <button
@@ -30,29 +34,13 @@ export function TierSelector({ selected, onSelect, availableTiers }: TierSelecto
               onClick={() => isAvailable && onSelect(tier.id)}
               disabled={!isAvailable}
               aria-pressed={isSelected}
-              className={`relative bg-bg-card border rounded-xl p-4 text-center transition-all ${
-                !isAvailable
-                  ? 'border-border opacity-40 cursor-not-allowed'
-                  : isSelected
-                    ? 'border-green-primary shadow-[0_0_15px_var(--color-green-glow)] cursor-pointer'
-                    : 'border-border cursor-pointer hover:bg-bg-card-hover'
-              }`}
+              title={isAvailable ? undefined : 'Insufficient QSR'}
+              className={`border border-ink p-3.5 text-center ${state}`}
             >
-              <p className="text-text-secondary text-xs uppercase tracking-wider mb-1">
-                {tier.shortLabel ? (
-                  <>
-                    <span className="sm:hidden">{tier.shortLabel}</span>
-                    <span className="hidden sm:inline">{tier.label}</span>
-                  </>
-                ) : tier.label}
-              </p>
-              <p className="font-mono text-2xl font-bold text-text-primary">
-                {tier.qsr}
-              </p>
-              <p className="text-text-muted text-xs mt-1">QSR</p>
-              <p className="text-text-secondary text-xs mt-2">
-                {isAvailable ? tier.description : 'Insufficient QSR'}
-              </p>
+              <span className="block text-[12px]">
+                {isSelected ? '[x]' : '[ ]'} {tier.label}
+              </span>
+              <span className="block text-[20px] font-bold">{tier.qsr}</span>
             </button>
           );
         })}
