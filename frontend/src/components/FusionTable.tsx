@@ -42,7 +42,7 @@ export function FusionTable() {
   const currentHeight = statsData?.currentHeight ?? 0;
 
   if (isLoading) return <Notice>LOADING...</Notice>;
-  if (isError) return <Notice>ERR: could not load fusions</Notice>;
+  if (isError && !data) return <Notice>ERR: could not load fusions</Notice>;
 
   const fusions = data?.fusions || [];
   const totalPages = data?.totalPages || 1;

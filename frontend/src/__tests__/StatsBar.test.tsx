@@ -27,6 +27,25 @@ describe('StatsBar', () => {
     expect(screen.getAllByText('ERR')).toHaveLength(3);
   });
 
+  it('keeps cached values when a background refetch fails', () => {
+    mockStats({
+      isError: true,
+      data: {
+        walletAddress: 'z1qp972aed9levp34gwn32xw24j2evsmcmu6knx0',
+        qsrAvailable: 940,
+        qsrFused: 2360,
+        qsrBalance: 940,
+        activeFusionCount: 34,
+        availableTiers: ['low'],
+        nextUnfuseAt: null,
+        currentHeight: 14216178,
+      },
+    });
+    render(<StatsBar />);
+    expect(screen.queryByText('ERR')).toBeNull();
+    expect(screen.getByText('940')).toBeInTheDocument();
+  });
+
   it('renders unformatted numbers with at most two decimals', () => {
     mockStats({
       data: {

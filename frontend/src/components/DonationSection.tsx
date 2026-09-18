@@ -32,7 +32,7 @@ export function DonationSection() {
         <div className="mt-2 border border-dim">
           {isLoading ? (
             <p className="px-3 py-[9px] text-[12px] text-dim">LOADING...</p>
-          ) : isError ? (
+          ) : isError && !donations ? (
             <p className="px-3 py-[9px] text-[12px] text-dim">ERR: could not load donations</p>
           ) : donorList.length === 0 ? (
             <p className="px-3 py-[9px] text-[12px] text-dim">NO DONATIONS YET</p>

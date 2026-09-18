@@ -3,7 +3,7 @@ import { AddressRow } from './AddressRow';
 
 /** Unformatted number (no locale separators), at most 2 decimals. */
 function plain(n: number | undefined, loading: boolean, failed: boolean): string {
-  if (failed) return 'ERR';
+  if (n == null && failed) return 'ERR';
   if (loading || n == null) return '...';
   return String(parseFloat(n.toFixed(2)));
 }

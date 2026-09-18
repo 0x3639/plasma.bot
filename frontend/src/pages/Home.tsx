@@ -50,28 +50,31 @@ export function Home() {
   const availableTiers = stats?.availableTiers;
   const noTiersAvailable = availableTiers && availableTiers.length === 0;
 
-  // Derive effective tier: clear selection if it became unavailable
-  const effectiveTier = tier && availableTiers && !availableTiers.includes(tier) ? null : tier;
+  // Clear the stored selection if a stats refresh made it unavailable, so it
+  // does not silently reselect itself when the tier comes back.
+  if (tier && availableTiers && !availableTiers.includes(tier)) {
+    setTier(null);
+  }
 
   const isValidAddress = /^z1[a-z0-9]{38}$/.test(address);
-  const canSubmit = isValidAddress && effectiveTier !== null && !fuseMutation.isPending && !noTiersAvailable;
+  const canSubmit = isValidAddress && tier !== null && !fuseMutation.isPending && !noTiersAvailable;
 
   const submitLabel = fuseMutation.isPending
     ? '>> EXECUTING...'
-    : canSubmit && effectiveTier
-      ? `>> EXECUTE FUSE (${TIER_QSR[effectiveTier]} QSR)`
+    : canSubmit && tier
+      ? `>> EXECUTE FUSE (${TIER_QSR[tier]} QSR)`
       : '>> EXECUTE FUSE';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !effectiveTier) return;
+    if (!canSubmit || !tier) return;
 
     setAlert(null);
 
     try {
       const result = await fuseMutation.mutateAsync({
         address,
-        tier: effectiveTier,
+        tier,
       });
 
       if (result.success) {
@@ -127,7 +130,7 @@ export function Home() {
               ) : (
                 <form onSubmit={handleSubmit}>
                   <AddressInput value={address} onChange={setAddress} />
-                  <TierSelector selected={effectiveTier} onSelect={setTier} availableTiers={availableTiers} />
+                  <TierSelector selected={tier} onSelect={setTier} availableTiers={availableTiers} />
                   <button
                     type="submit"
                     disabled={!canSubmit}

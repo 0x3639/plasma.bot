@@ -193,6 +193,44 @@ describe('Home', () => {
     expect(high).toBeDisabled();
     expect(high).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: /EXECUTE FUSE/ })).toBeDisabled();
+
+    // Restoring the tier must not silently reselect it.
+    mockStats({ data: STATS });
+    rerender(<Home />);
+    const restored = screen.getByRole('button', { name: /\[ \] HIGH/ });
+    expect(restored).toBeEnabled();
+    expect(restored).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /EXECUTE FUSE/ })).toBeDisabled();
+
+    fireEvent.click(restored);
+    expect(screen.getByRole('button', { name: /\[x\] HIGH/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /EXECUTE FUSE/ })).toBeEnabled();
+  });
+
+  it('keeps cached fusions and donations visible when a background refetch fails', async () => {
+    vi.mocked(useFusions).mockReturnValue({
+      data: {
+        fusions: [{ beneficiary: ADDRESS, tier: 'high', qsrAmount: 120, fusedAt: new Date().toISOString(), status: 'active', expirationHeight: 1 }],
+        count: 1, total: 1, page: 1, totalPages: 1,
+      },
+      isLoading: false,
+      isError: true,
+    } as unknown as ReturnType<typeof useFusions>);
+    vi.mocked(useDonations).mockReturnValue({
+      data: { donations: [{ address: ADDRESS, totalQsr: 50 }], donorCount: 1 },
+      isLoading: false,
+      isError: true,
+    } as unknown as ReturnType<typeof useDonations>);
+    mockStats({ data: STATS, isError: true });
+    const Home = await loadHome();
+    render(<Home />);
+
+    expect(screen.getByText('OFFLINE')).toBeInTheDocument();
+    expect(screen.queryByText('ERR: could not load fusions')).toBeNull();
+    expect(screen.getByRole('link', { name: 'z1qzal6c...kwsts' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '[+] SHOW_DONATIONS (1)' }));
+    expect(screen.queryByText('ERR: could not load donations')).toBeNull();
+    expect(screen.getByText('50')).toBeInTheDocument();
   });
 
   it('renders ERR notices when the fusion or donation queries fail', async () => {
