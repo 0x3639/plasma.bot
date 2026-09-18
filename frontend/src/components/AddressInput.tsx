@@ -13,7 +13,11 @@ export function AddressInput({ value, onChange, error }: AddressInputProps) {
       <label htmlFor="address-input" className="mb-1.5 block text-[11px] text-dim">
         ZENON_ADDRESS:
       </label>
-      <div className={`mb-1.5 flex items-center border ${showError || error ? 'border-error' : 'border-ink'}`}>
+      <div
+        className={`mb-1.5 flex items-center border focus-within:bg-faint focus-within:shadow-[inset_0_0_0_1px_var(--color-ink)] ${
+          showError || error ? 'border-error focus-within:shadow-[inset_0_0_0_1px_var(--color-error)]' : 'border-ink'
+        }`}
+      >
         <span className="pl-3 text-[13px] text-dim" aria-hidden="true">&gt;</span>
         <input
           id="address-input"
