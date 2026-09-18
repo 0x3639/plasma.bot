@@ -77,6 +77,31 @@ describe('AddressRow', () => {
     expect(button).toHaveTextContent('COPY');
   });
 
+  it('does not reset the label while a slow second write is pending', async () => {
+    let resolveSecond: () => void = () => {};
+    writeText
+      .mockResolvedValueOnce(undefined)
+      .mockReturnValueOnce(new Promise<void>((resolve) => { resolveSecond = resolve; }));
+    render(<AddressRow address={ADDRESS} />);
+    const button = screen.getByRole('button', { name: 'Copy address' });
+
+    fireEvent.click(button);
+    await flush();
+    expect(button).toHaveTextContent('COPIED');
+    act(() => vi.advanceTimersByTime(1500));
+
+    fireEvent.click(button);
+    act(() => vi.advanceTimersByTime(1000)); // past the first click's 2s reset
+    expect(button).toHaveTextContent('COPIED');
+
+    resolveSecond();
+    await flush();
+    expect(button).toHaveTextContent('COPIED');
+
+    act(() => vi.advanceTimersByTime(2000));
+    expect(button).toHaveTextContent('COPY');
+  });
+
   it('ignores a write that completes after unmount', async () => {
     let resolveWrite: () => void = () => {};
     writeText.mockReturnValue(new Promise<void>((resolve) => { resolveWrite = resolve; }));

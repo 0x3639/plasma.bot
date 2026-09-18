@@ -22,6 +22,8 @@ export function AddressRow({ address }: AddressRowProps) {
   const copyAddress = async () => {
     if (!address) return;
     const op = ++latestOp.current;
+    // Stop a previous reset from firing while this write is still pending.
+    if (resetTimer.current) clearTimeout(resetTimer.current);
     let next: 'copied' | 'failed';
     try {
       await navigator.clipboard.writeText(address);
