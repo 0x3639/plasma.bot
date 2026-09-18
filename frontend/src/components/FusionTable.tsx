@@ -37,11 +37,12 @@ function Notice({ children }: { children: React.ReactNode }) {
 export function FusionTable() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
-  const { data, isLoading } = useFusions(page, pageSize);
+  const { data, isLoading, isError } = useFusions(page, pageSize);
   const { data: statsData } = useStats();
   const currentHeight = statsData?.currentHeight ?? 0;
 
   if (isLoading) return <Notice>LOADING...</Notice>;
+  if (isError) return <Notice>ERR: could not load fusions</Notice>;
 
   const fusions = data?.fusions || [];
   const totalPages = data?.totalPages || 1;

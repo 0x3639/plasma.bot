@@ -8,19 +8,30 @@ interface AddressRowProps {
 export function AddressRow({ address }: AddressRowProps) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestOp = useRef(0);
+  const mounted = useRef(true);
 
-  useEffect(() => () => {
-    if (resetTimer.current) clearTimeout(resetTimer.current);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+    };
   }, []);
 
   const copyAddress = async () => {
     if (!address) return;
+    const op = ++latestOp.current;
+    let next: 'copied' | 'failed';
     try {
       await navigator.clipboard.writeText(address);
-      setCopyState('copied');
+      next = 'copied';
     } catch {
-      setCopyState('failed');
+      next = 'failed';
     }
+    // Ignore completions that arrive after unmount or after a newer click.
+    if (!mounted.current || op !== latestOp.current) return;
+    setCopyState(next);
     if (resetTimer.current) clearTimeout(resetTimer.current);
     resetTimer.current = setTimeout(() => setCopyState('idle'), 2000);
   };

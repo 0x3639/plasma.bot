@@ -10,7 +10,7 @@ function truncateAddress(addr: string, startChars: number, endChars: number): st
 
 export function DonationSection() {
   const { data: stats } = useStats();
-  const { data: donations, isLoading } = useDonations();
+  const { data: donations, isLoading, isError } = useDonations();
   const [expanded, setExpanded] = useState(false);
 
   const donorList = donations?.donations ?? [];
@@ -32,6 +32,8 @@ export function DonationSection() {
         <div className="mt-2 border border-dim">
           {isLoading ? (
             <p className="px-3 py-[9px] text-[12px] text-dim">LOADING...</p>
+          ) : isError ? (
+            <p className="px-3 py-[9px] text-[12px] text-dim">ERR: could not load donations</p>
           ) : donorList.length === 0 ? (
             <p className="px-3 py-[9px] text-[12px] text-dim">NO DONATIONS YET</p>
           ) : (
